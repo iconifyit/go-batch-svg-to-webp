@@ -1,0 +1,69 @@
+# Target AWS Region
+aws_region: us-east-1
+
+# Source bucket name
+# source_bucket: vectopus-webp-test
+source_bucket: image-engine-private-prod
+
+# Target bucket name
+target_bucket: vectopus-webp-test-out
+# target_bucket: image-engine-public-prod
+
+# Prefixes to include
+# include_prefixes:
+#   - iconify
+
+# Prefixes to exclude
+# omit_prefixes:
+  # - do-not-touch
+
+# Dry run?
+dry_run: true
+
+# Local?
+is_local: true
+
+local_source: /Users/scott/github/vectopus-code/svg-to-webp/test/input/dog-avatars/icons
+local_target: /Users/scott/github/vectopus-code/svg-to-webp/test/output/dog-avatars
+
+# Garbage collection
+auto_cleanup: true
+
+# ffMpeg path
+ffmpegPath: /opt/homebrew/bin/ffmpeg
+
+# Webp sizes
+webp_sizes:
+  thumbnail: 128
+  preview: 512
+  watermark: 512
+
+# Watermark
+watermark_path: /Users/scott/github/vectopus-code/svg-to-webp/assets/watermark.svg
+
+# AWS Role arn
+role_arn: arn:aws:iam::511873596089:role/svg-webp-app-role
+
+# Logging output
+# 0 = no output
+# 1 = output to console
+# 2 = output to file
+# 3 = output to both
+logging_output: 3
+
+# Log file path
+logfile: ./output.log
+
+# Work dir
+work_dir: ./tmp
+
+# Output dir
+output_dir: ./test/output
+
+# Worker Count
+worker_pool_size: 10
+download_worker_pool_size: 5
+process_worker_pool_size: 10
+
+# Use Hardware Acceleration
+use_hardware_acceleration: true
