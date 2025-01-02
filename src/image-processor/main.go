@@ -17,55 +17,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/google/uuid"
-	"gopkg.in/yaml.v2"
 )
 
 type ImageProcessor struct {
-	UUID         string
-	Config       *Config
-	Session      *session.Session
-	WatermarkSVG string
-}
-
-type Config struct {
-	SourceBucket            string         `yaml:"source_bucket"`
-	TargetBucket            string         `yaml:"target_bucket"`
-	Include                 []string       `yaml:"include_prefixes"`
-	Exclude                 []string       `yaml:"omit_prefixes"`
-	Region                  string         `yaml:"aws_region"`
-	DryRun                  bool           `yaml:"dry_run"`
-	FFmpegPath              string         `yaml:"ffmpegPath"`
-	IsLocal                 bool           `yaml:"is_local"`
-	LocalSource             string         `yaml:"local_source"`
-	LocalTarget             string         `yaml:"local_target"`
-	AutoCleanup             bool           `yaml:"auto_cleanup"`
-	WebpSizes               map[string]int `yaml:"webp_sizes"`
-	WatermarkPath           string         `yaml:"watermark_path"`
-	RoleArn                 string         `yaml:"role_arn"`
-	LoggingOutput           int            `yaml:"logging_output"`
-	Logfile                 string         `yaml:"logfile"`
-	WorkDir                 string         `yaml:"work_dir"`
-	OutputDir               string         `yaml:"output_dir"`
-	UseHardwareAcceleration bool           `yaml:"use_hardware_acceleration"`
-	WorkerPoolSize          int            `yaml:"worker_pool_size"`
-	DownloadWorkerPoolSize  int            `yaml:"download_worker_pool_size"`
-	ProcessWorkerPoolSize   int            `yaml:"process_worker_pool_size"`
-}
-
-// LoadConfig reads the configuration from the provided path.
-func LoadConfig(path string) (*Config, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	config := &Config{}
-	if err := yaml.NewDecoder(file).Decode(config); err != nil {
-		return nil, err
-	}
-
-	return config, nil
+	UUID          string
+	Config        *Config
+	Session       *session.Session
+	DownloadQueue chan string
+	ProcessQueue  chan string
 }
 
 // SetupLogging configures logging based on the provided setting
@@ -79,17 +38,21 @@ func (ip *ImageProcessor) SetupLogging() error {
 	}
 
 	switch logSetting {
-	case 0: // No output
+	// No output
+	case 0:
 		log.SetOutput(io.Discard)
-	case 1: // Log to console
+		// Log to console
+	case 1:
 		log.SetOutput(os.Stdout)
-	case 2: // Log to file
+		// Log to file
+	case 2:
 		logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %v", err)
 		}
 		log.SetOutput(logFile)
-	case 3: // Log to both console and file
+		// Log to both console and file
+	case 3:
 		logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %v", err)
@@ -475,16 +438,6 @@ func (ip *ImageProcessor) RenameFolderWithTimestamp(folderPath string) error {
 	return nil
 }
 
-// Load WatermarkSVG file
-// func (ip *ImageProcessor) LoadWatermarkSVG() error {
-// 	data, err := os.ReadFile(ip.Config.WatermarkPath)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read watermark file %s: %v", ip.Config.WatermarkPath, err)
-// 	}
-// 	ip.WatermarkSVG = string(data)
-// 	return nil
-// }
-
 // ProcessFiles processes all files
 func (ip *ImageProcessor) ProcessFiles() error {
 	files, err := ip.ListFiles()
@@ -518,6 +471,77 @@ func (ip *ImageProcessor) ProcessFiles() error {
 	return nil
 }
 
+func (ip *ImageProcessor) downloadWorker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for file := range ip.DownloadQueue {
+		log.Printf("Download Worker %d: Downloading file %s", id, file)
+
+		localPath, err := ip.downloadFile(file) // Implement download logic
+		if err != nil {
+			log.Printf("Download Worker %d: Failed to download %s: %v", id, file, err)
+			continue
+		}
+
+		// Add the downloaded file to the process queue
+		ip.ProcessQueue <- localPath
+		log.Printf("Download Worker %d: File %s added to processing queue", id, file)
+	}
+
+	log.Printf("Download Worker %d: Finished", id)
+}
+
+func (ip *ImageProcessor) downloadFile(file string) (string, error) {
+	localPath := filepath.Join(ip.Config.WorkDir, "source", ip.UUID, filepath.Base(file))
+
+	if ip.Config.IsLocal {
+		// Copy from local source
+		srcPath := filepath.Join(ip.Config.LocalSource, file)
+		if err := ip.CopyFile(srcPath, localPath); err != nil {
+			return "", fmt.Errorf("failed to copy local file: %v", err)
+		}
+	} else {
+		// Download from S3
+		svc := s3.New(ip.Session)
+		s3Object, err := svc.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String(ip.Config.SourceBucket),
+			Key:    aws.String(file),
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to download file from S3: %v", err)
+		}
+		defer s3Object.Body.Close()
+
+		outFile, err := os.Create(localPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to create local file: %v", err)
+		}
+		defer outFile.Close()
+
+		if _, err := io.Copy(outFile, s3Object.Body); err != nil {
+			return "", fmt.Errorf("failed to copy S3 file to local: %v", err)
+		}
+	}
+
+	return localPath, nil
+}
+
+func (ip *ImageProcessor) processWorker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for file := range ip.ProcessQueue {
+		log.Printf("Processing Worker %d: Processing file %s", id, file)
+
+		if err := ip.ProcessFile(file); err != nil {
+			log.Printf("Processing Worker %d: Failed to process file %s: %v", id, file, err)
+		} else {
+			log.Printf("Processing Worker %d: Successfully processed file: %s", id, file)
+		}
+	}
+
+	log.Printf("Processing Worker %d: Finished", id)
+}
+
 // Cleanup removes temporary directories and files
 func (ip *ImageProcessor) Cleanup() {
 	// Clean up empty directories.
@@ -539,14 +563,49 @@ func (ip *ImageProcessor) Run() error {
 		return fmt.Errorf("failed to set up logging: %v", err)
 	}
 
-	// ip.LoadWatermarkSVG()
-
-	if err := ip.ProcessFiles(); err != nil {
-		return fmt.Errorf("failed to process files: %v", err)
+	files, err := ip.ListFiles()
+	if err != nil {
+		return fmt.Errorf("failed to list files: %v", err)
 	}
 
-	ip.RenameFolderWithTimestamp(ip.Config.OutputDir + "/" + ip.UUID)
+	log.Printf("Files to process: %v", files)
 
+	// Initialize queues
+	ip.DownloadQueue = make(chan string, len(files))
+	ip.ProcessQueue = make(chan string, len(files))
+
+	// WaitGroups for synchronization
+	var downloadWG sync.WaitGroup
+	var processWG sync.WaitGroup
+
+	// Start download workers
+	for i := 0; i < ip.Config.DownloadWorkerPoolSize; i++ {
+		downloadWG.Add(1)
+		go ip.downloadWorker(i, &downloadWG)
+	}
+
+	// Start processing workers
+	for i := 0; i < ip.Config.ProcessWorkerPoolSize; i++ {
+		processWG.Add(1)
+		go ip.processWorker(i, &processWG)
+	}
+
+	// Queue up files for downloading
+	for _, file := range files {
+		ip.DownloadQueue <- file
+	}
+	close(ip.DownloadQueue)
+
+	// Wait for all downloads to complete
+	downloadWG.Wait()
+
+	// Close the process queue to signal no more files for processing
+	close(ip.ProcessQueue)
+
+	// Wait for all processing to complete
+	processWG.Wait()
+
+	// Cleanup temporary files and directories
 	ip.Cleanup()
 
 	return nil
