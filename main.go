@@ -27,6 +27,7 @@ func main() {
 
 	imageProcessor.Run()
 
+	log.Println("------------------------------------------------------")
 	log.Printf("Started image processor at time: %s", startTime.String())
 	log.Printf("Finished image processor at time: %s", time.Now().String())
 	log.Printf("Elapsed time: %s", time.Since(time.Now()))
