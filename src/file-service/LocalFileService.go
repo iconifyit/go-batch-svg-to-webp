@@ -2,11 +2,12 @@ package fileservice
 
 import (
 	"fmt"
-	fn "image-processor/src/common"
-	imagefile "image-processor/src/image-file"
 	"log"
 	"os"
 	"path/filepath"
+
+	fn "github.com/iconifyit/go-batch-svg-to-webp/src/common"
+	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 )

@@ -1,6 +1,6 @@
 package database
 
-import "image-processor/src/models"
+import "github.com/iconifyit/go-batch-svg-to-webp/src/models"
 
 // GetSet fetches a single set with associated images.
 func (svc *DatabaseService) GetSetById(id int) (*models.Set, error) {

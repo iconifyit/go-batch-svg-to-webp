@@ -4,8 +4,8 @@ import (
 	"log"
 	"time"
 
-	fn "image-processor/src/common"
-	ip "image-processor/src/image-processor"
+	fn "github.com/iconifyit/go-batch-svg-to-webp/src/common"
+	ip "github.com/iconifyit/go-batch-svg-to-webp/src/image-processor"
 
 	"github.com/spf13/pflag"
 )

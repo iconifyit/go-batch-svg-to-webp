@@ -1,7 +1,7 @@
 package database
 
 import (
-	"image-processor/src/models"
+	"github.com/iconifyit/go-batch-svg-to-webp/src/models"
 )
 
 // GetUserById fetches a single user with associated data.

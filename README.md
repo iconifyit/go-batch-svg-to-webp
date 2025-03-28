@@ -197,3 +197,7 @@ Feel free to file issues or suggest enhancements as well.
 ## 📄 License
 
 MIT License. See LICENSE for details.
+
+## Disclaimer
+
+This software is provided “as is” without warranty of any kind. You are responsible for testing it in your environment and ensuring it meets your needs. The authors and maintainers are not liable for any loss of data, outages, or other damage resulting from use.

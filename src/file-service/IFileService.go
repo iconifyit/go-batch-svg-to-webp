@@ -1,7 +1,7 @@
 package fileservice
 
 import (
-	imagefile "image-processor/src/image-file"
+	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 )
 
 type IFileService interface {
