@@ -2,9 +2,6 @@ package imageprocessor
 
 import (
 	"fmt"
-	fn "image-processor/src/common"
-	fileservice "image-processor/src/file-service"
-	imagefile "image-processor/src/image-file"
 	"io"
 	"log"
 	"os"
@@ -12,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	fn "github.com/iconifyit/go-batch-svg-to-webp/src/common"
+	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
+	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -176,10 +177,6 @@ func (ip *ImageProcessor) ProcessFile(imgFile imagefile.ImageFile) error {
 	log.Printf("processSourceDir : %s", processSourceDir)
 	log.Printf("processIntermediateDir : %s", processIntermediateDir)
 	log.Printf("processOutputDir : %s", processOutputDir)
-
-	// processSourceDir : /Volumes/image-processor-ramdisk/a81cb2d2-f46b-4acb-b555-f261d26259c0/source
-	// processIntermediateDir : /Volumes/image-processor-ramdisk/a81cb2d2-f46b-4acb-b555-f261d26259c0/intermediate
-	// processOutputDir : /Volumes/image-processor-ramdisk/a81cb2d2-f46b-4acb-b555-f261d26259c0/output
 
 	// =========================================================================
 	// Ensure base directories exist

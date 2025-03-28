@@ -15,10 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/google/uuid"
 
-	fn "image-processor/src/common"
-	dbsvc "image-processor/src/database"
-	fileservice "image-processor/src/file-service"
-	imagefile "image-processor/src/image-file"
+	fn "github.com/iconifyit/go-batch-svg-to-webp/src/common"
+	dbsvc "github.com/iconifyit/go-batch-svg-to-webp/src/database"
+	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
+	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
 	"gorm.io/gorm"
 )
