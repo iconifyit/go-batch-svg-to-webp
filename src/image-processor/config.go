@@ -1,12 +1,15 @@
 package imageprocessor
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
+	Contributor             string         `yaml:"contributor"`
 	SourceBucket            string         `yaml:"source_bucket"`
 	TargetBucket            string         `yaml:"target_bucket"`
 	Include                 []string       `yaml:"include_prefixes"`
@@ -15,6 +18,7 @@ type Config struct {
 	DryRun                  bool           `yaml:"dry_run"`
 	FFmpegPath              string         `yaml:"ffmpegPath"`
 	IsLocal                 bool           `yaml:"is_local"`
+	UploadToS3              bool           `yaml:"upload_to_s3"`
 	LocalSource             string         `yaml:"local_source"`
 	LocalTarget             string         `yaml:"local_target"`
 	AutoCleanup             bool           `yaml:"auto_cleanup"`
@@ -31,18 +35,78 @@ type Config struct {
 	ProcessWorkerPoolSize   int            `yaml:"process_worker_pool_size"`
 }
 
-// LoadConfig reads the configuration from the provided path.
-func LoadConfig(path string) (*Config, error) {
-	file, err := os.Open(path)
+func (config *Config) GetSourceDir() string {
+	return filepath.Join(config.WorkDir, "source")
+}
+
+func (config *Config) GetIntermediateDir() string {
+	return filepath.Join(config.WorkDir, "intermediate")
+}
+
+func (config *Config) GetTargetDir() string {
+	return filepath.Join(config.WorkDir, "output")
+}
+
+func (config *Config) GetWorkDir() string {
+	return config.WorkDir
+}
+
+func (config *Config) SetDefaults() {
+
+	// Test if *config.LocalRun is set. If not set, set to false
+	config.IsLocal = config.IsLocal || false
+
+	config.UploadToS3 = config.UploadToS3 || false
+
+	if config.WorkDir == "" {
+		config.WorkDir = "./tmp/work"
+	}
+
+	if config.OutputDir == "" {
+		config.OutputDir = "./tmp/output"
+	}
+
+	// UseHardwareAcceleration defaults to false
+	config.UseHardwareAcceleration = config.UseHardwareAcceleration || false
+
+	// WorkerPoolSize defaults to 1
+	if config.WorkerPoolSize == 0 {
+		config.WorkerPoolSize = 1
+	}
+
+	// DownloadWorkerPoolSize defaults to 1
+	if config.DownloadWorkerPoolSize == 0 {
+		config.DownloadWorkerPoolSize = 1
+	}
+
+	// Logfile defaults to './tmp/image-processor.log'
+	if config.Logfile == "" {
+		config.Logfile = "./tmp/image-processor.log"
+	}
+
+	// auto_cleanup defaults to false
+	config.AutoCleanup = config.AutoCleanup || false
+
+	// Region defaults to 'us-east-1'
+	if config.Region == "" {
+		config.Region = "us-east-1"
+	}
+}
+
+func NewConfig(configpath string) (*Config, error) {
+	file, err := os.Open(configpath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error opening config file: %s", err)
 	}
 	defer file.Close()
 
 	config := &Config{}
+
 	if err := yaml.NewDecoder(file).Decode(config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding config file: %s", err)
 	}
+
+	config.SetDefaults()
 
 	return config, nil
 }

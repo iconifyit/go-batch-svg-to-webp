@@ -37,3 +37,6 @@ scratch
 
 # Test output folder
 test/output
+
+bak/*
+bak-*

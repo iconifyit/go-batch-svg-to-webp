@@ -1,34 +1,49 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"os"
 	"time"
 
-	// Correctly import the uuid package
-
+	fn "image-processor/src/common"
 	ip "image-processor/src/image-processor"
+
+	"github.com/spf13/pflag"
 )
 
-// main is the entry point for the application.
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: go run main.go <config.yml>")
+	// Define named arguments with both short and long names
+	var contributor string
+	var configFile string
+
+	pflag.StringVarP(&contributor, "contributor", "c", "", "Contributor name")
+	pflag.StringVarP(&configFile, "file", "f", "", "Path to the configuration file")
+
+	// Parse the command-line arguments
+	pflag.Parse()
+
+	// Validate required arguments
+	if configFile == "" || contributor == "" {
+		log.Fatal("Usage: go run main.go -f | --file <config.yml> [-c | --contributor <contributor>]")
 	}
 
 	startTime := time.Now()
 
-	configFile := os.Args[1]
 	log.Printf("Using config file: %s", configFile)
+	log.Printf("Processing for contributor: %s", contributor)
 
-	imageProcessor := ip.NewImageProcessor(configFile)
-	fmt.Println(imageProcessor.Config)
+	// Initialize the ImageProcessor
+	imageProcessor := ip.NewImageProcessor(contributor, configFile)
 
+	// Print the loaded configuration
+	// log.Printf("Config: %v", fn.ToJSON(imageProcessor.Config))
+	log.Printf("ImageProcessor: %v", fn.ToJSON(imageProcessor))
+
+	// Run the image processor
 	imageProcessor.Run()
 
+	// Log the timing details
 	log.Println("------------------------------------------------------")
 	log.Printf("Started image processor at time: %s", startTime.String())
 	log.Printf("Finished image processor at time: %s", time.Now().String())
-	log.Printf("Elapsed time: %s", time.Since(time.Now()))
+	log.Printf("Elapsed time: %s", time.Since(startTime))
 }
