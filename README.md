@@ -15,6 +15,8 @@ This CLI tool:
 
 Go was chosen for its speed and concurrency model, reducing processing time from an estimated 11.5 days (Node.js) to just 45 minutes.
 
+For a detailed view of the assumptions and calculations used to estimate performance, see the [image-processing-benchmark.md](image-processing-benchmark.md) file.
+
 ## ⚙️ Features
 
 - Highly concurrent: configurable worker pool
