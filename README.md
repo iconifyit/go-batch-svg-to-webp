@@ -26,6 +26,9 @@ For a detailed view of the assumptions and calculations used to estimate perform
 - Robust logging and error reporting
 - Modular design with interchangeable file service backends
 
+## NOTE: 
+This is a work-in-progress and should **not** be used for production installations. It was built for a specific task. Some items may not be relevant to your setup and purposes (e.g., contributor). Where-ever you see `contributor` you can most likely change it to `prefix`. 
+
 ## 📦 Installation
 
 Clone the repository and build the CLI:
