@@ -61,7 +61,7 @@ logging_output: 3
 logfile: ./output.log
 
 # Work dir
-work_dir: ""
+work_dir: "/Volumes/image-processor-ramdisk/"
 
 # Output dir
 output_dir: ./test/output

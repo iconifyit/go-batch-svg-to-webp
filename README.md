@@ -96,7 +96,7 @@ local_source: /path/to/local/test/input
 local_target: /path/to/local/test/output
 
 # Archive structure
-archive_structure: contributor,family,set,icons
+archive_structure: prefix,family,set,icons
 
 # Garbage collection
 auto_cleanup: false
@@ -146,7 +146,7 @@ use_hardware_acceleration: true
 Run the processor with:
 
 ```bash
-./image-processor --contributor=iconify --config=config.yaml
+./image-processor --prefix=iconify --config=config.yaml
 ```
 
 This will:

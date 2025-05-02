@@ -1,0 +1,76 @@
+# Target AWS Region
+aws_region: us-east-1
+
+# Source bucket name
+# source_bucket: vectopus-webp-test
+source_bucket: your-input-bucket
+
+# Target bucket name
+target_bucket: your-output-bucket
+# target_bucket: image-engine-public-prod
+
+# Prefixes to include
+include_prefixes:
+  - my-prefix
+
+# Prefixes to exclude
+# omit_prefixes:
+#   - another-prefix
+
+# Dry run? 
+# TODO: Add dry run functionality
+dry_run: true
+
+# Local?
+is_local: true
+
+# Upload results to s3?
+upload_to_s3: true
+
+local_source: /path/to/local/input
+local_target: /path/to/local/output
+
+# Archive structure
+archive_structure: contributor,family,set,icons
+
+# Garbage collection
+auto_cleanup: false
+
+# ffMpeg path
+ffmpegPath: /opt/homebrew/bin/ffmpeg
+
+# Webp sizes
+webp_sizes:
+  thumbnail: 128
+  preview: 512
+  watermark: 512
+
+# Watermark
+watermark_path: /path/to/local/watermark.svg
+
+# AWS Role arn
+role_arn: arn:aws:iam::000000000000:role/svg-webp-app-role
+
+# Logging output
+# 0 = no output
+# 1 = output to console
+# 2 = output to file
+# 3 = output to both
+logging_output: 3
+
+# Log file path
+logfile: ./output.log
+
+# Work dir
+work_dir: "/Volumes/image-processor-ramdisk/"
+
+# Output dir
+output_dir: ./test/output
+
+# Worker Count
+worker_pool_size: 10
+download_worker_pool_size: 5
+process_worker_pool_size: 10
+
+# Use Hardware Acceleration
+use_hardware_acceleration: true
