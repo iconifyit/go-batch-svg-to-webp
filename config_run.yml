@@ -23,6 +23,9 @@ dry_run: true
 # Local?
 is_local: true
 
+# Upload results to s3?
+upload_to_s3: true
+
 local_source: /Users/scott/github/vectopus-code/image-processor/test/input
 local_target: /Users/scott/github/vectopus-code/image-processor/test/output
 
@@ -58,7 +61,7 @@ logging_output: 3
 logfile: ./output.log
 
 # Work dir
-work_dir: "/Volumes/image-processor-ramdisk/"
+work_dir: "/Volumes/image-processor-ramdisk//Volumes/image-processor-ramdisk/"
 
 # Output dir
 output_dir: ./test/output
