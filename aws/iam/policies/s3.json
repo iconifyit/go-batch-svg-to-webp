@@ -9,8 +9,8 @@
                 "s3:PutObject"
             ],
             "Resource": [
-                "arn:aws:s3:::vectopus-webp-test",
-                "arn:aws:s3:::vectopus-webp-test/*"
+                "arn:aws:s3:::my-bucket-name",
+                "arn:aws:s3:::my-bucket-name/*"
             ]
         }
     ]
