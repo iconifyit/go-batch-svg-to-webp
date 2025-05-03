@@ -15,7 +15,37 @@ This CLI tool:
 
 Go was chosen for its speed and concurrency model, reducing processing time from an estimated 11.5 days (Node.js) to just 45 minutes.
 
-For a detailed view of the assumptions and calculations used to estimate performance, see the [image-processing-benchmark.md](image-processing-benchmark.md) file.
+## Test Results
+
+### Performance Calculations
+
+I first built a single-threaded version of the Go application to establish a baseline and processed 4,500 files. The total run time was 7 minutes 17 seconds. If we extrapolate this to 500,000 files, we get a total run time of about 13 hours.
+
+**Single-threaded Calculation:**
+
+| Step                                         | Calculation                      | Result        |
+|----------------------------------------------|----------------------------------|---------------|
+| Files processed                              | 4,500 files                      |               |
+| Total time for processing                   | 7 minutes 17 seconds             |               |
+| Files per second                             | 4,500 / (7 * 60 + 17)            | 10.4 files/sec |
+| Extrapolated time for 500,000 files         | 500,000 / 10.4                   | 48,077 seconds |
+| Time in minutes                             | 48,077 / 60                      | 801.3 minutes |
+| Time in hours                               | 801.3 / 60                       | 13.4 hours    |
+
+---
+
+Next, I added concurrency and started with 10 workers. I was expecting it to be faster, but expected it would take at least a few minutes. In fact, it took only 27 seconds to process the 4,500 files.
+
+**Concurrent Calculation (with 10 workers):**
+
+| Step                                         | Calculation                      | Result        |
+|----------------------------------------------|----------------------------------|---------------|
+| Files processed                              | 4,500 files                      |               |
+| Total time for processing                   | 27 seconds                       |               |
+| Files per second                             | 4,500 / 27                       | 166.67 files/sec |
+| Extrapolated time for 500,000 files         | 500,000 / 166.67                 | 3,000 seconds |
+| Time in minutes                             | 3,000 / 60                       | 50 minutes    |
+
 
 ## ⚙️ Features
 
