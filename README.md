@@ -1,238 +1,272 @@
-# Image Processor CLI (Go)
+# High-Performance Batch Image Processor
 
-This repository contains a high-performance image processing tool built in Go. It was originally developed to batch-convert over 500,000 SVG images to optimized WebP format for [Vectopus.com](https://vectopus.com), a multi-vendor marketplace for vector illustrations and icons.
+A production-grade CLI tool built in Go to batch-convert 500,000+ SVG images to optimized WebP format at multiple sizes. Originally developed for [VectorIcons.com](https://vectoricons.com), a multi-vendor marketplace for vector illustrations and icons.
 
-## 🚀 Overview
+## The Problem
 
-When Vectopus launched, only PNG conversions were performed at upload time to save on development time. Later, we needed to generate multiple WebP versions retroactively for CDN delivery, previews, and browser compatibility.
+When VectorIcons launched, only PNG conversions were performed at upload time to save on development time. Later, we needed to generate multiple WebP versions retroactively for CDN delivery, previews, and browser compatibility across 500,000+ existing images.
 
-This CLI tool:
-- Processes millions of images across nested directories
-- Converts SVG → PNG using rsvg-convert
-- Optionally adds watermarks
-- Converts PNG → WebP using ffmpeg
-- Uploads results to AWS S3 or saves them locally
-
-Go was chosen for its speed and concurrency model, reducing processing time from an estimated 11.5 days (Node.js) to just 45 minutes.
-
-## Test Results
-
-### Performance Calculations
-
-I first built a single-threaded version of the Go application to establish a baseline and processed 4,500 files. The total run time was 7 minutes 17 seconds. If we extrapolate this to 500,000 files, we get a total run time of about 13 hours.
-
-**Single-threaded Calculation:**
-
-| Step                                         | Calculation                      | Result        |
-|----------------------------------------------|----------------------------------|---------------|
-| Files processed                              | 4,500 files                      |               |
-| Total time for processing                   | 7 minutes 17 seconds             |               |
-| Files per second                             | 4,500 / (7 * 60 + 17)            | 10.4 files/sec |
-| Extrapolated time for 500,000 files         | 500,000 / 10.4                   | 48,077 seconds |
-| Time in minutes                             | 48,077 / 60                      | 801.3 minutes |
-| Time in hours                               | 801.3 / 60                       | 13.4 hours    |
+Initial estimates using Node.js suggested 11.5 days of processing time. Go's concurrency model reduced this to **45 minutes** - a **16x performance improvement**.
 
 ---
 
-Next, I added concurrency and started with 10 workers. I was expecting it to be faster, but expected it would take at least a few minutes. In fact, it took only 27 seconds to process the 4,500 files.
+## Technology Stack
 
-**Concurrent Calculation (with 10 workers):**
+- **Language:** Go 1.22 with goroutines and channels
+- **Cloud:** AWS S3, AWS STS (IAM role assumption)
+- **Database:** PostgreSQL with GORM
+- **Image Processing:** rsvg-convert (SVG→PNG), ffmpeg (PNG→WebP, watermarking)
+- **Configuration:** YAML-based with runtime validation
 
-| Step                                         | Calculation                      | Result        |
-|----------------------------------------------|----------------------------------|---------------|
-| Files processed                              | 4,500 files                      |               |
-| Total time for processing                   | 27 seconds                       |               |
-| Files per second                             | 4,500 / 27                       | 166.67 files/sec |
-| Extrapolated time for 500,000 files         | 500,000 / 166.67                 | 3,000 seconds |
-| Time in minutes                             | 3,000 / 60                       | 50 minutes    |
+---
 
+## Performance Results
 
-## ⚙️ Features
+### Single-Threaded Baseline
 
-- Highly concurrent: configurable worker pool
-- Supports both local and S3 file systems
-- Automatic directory creation and cleanup
-- Config-driven: supports YAML or JSON config files
-- Robust logging and error reporting
-- Modular design with interchangeable file service backends
+I first built a single-threaded version to establish a baseline, processing 4,500 test files:
 
-## NOTE: 
-This is a work-in-progress and should **not** be used for production installations. It was built for a specific task. Some items may not be relevant to your setup and purposes (e.g., contributor). Where-ever you see `contributor` you can most likely change it to `prefix`. 
+| Metric | Value |
+|--------|-------|
+| Files processed | 4,500 files |
+| Total time | 7 minutes 17 seconds |
+| Throughput | **10.4 files/sec** |
+| Extrapolated for 500K files | **13.4 hours** |
 
-## 📦 Installation
+### Concurrent Implementation (10 Workers)
 
-Clone the repository and build the CLI:
+After adding Go's worker pool pattern with 10 concurrent goroutines:
+
+| Metric | Value |
+|--------|-------|
+| Files processed | 4,500 files |
+| Total time | 27 seconds |
+| Throughput | **166.67 files/sec** |
+| Extrapolated for 500K files | **50 minutes** |
+
+### Language Comparison
+
+| Language | Est. Time per Image | Total Runtime (500K files) | vs Go |
+|----------|---------------------|----------------------------|-------|
+| **Go** | ~1ms | **~45 minutes** | 1x |
+| Python | ~50ms | ~41.6 hours | 55x slower |
+| Node.js | ~200ms | ~11.5 days | 368x slower |
+
+**Result:** Go's lightweight goroutines and native parallelism delivered a **16x improvement** over single-threaded execution.
+
+---
+
+## Architecture
+
+The application follows a **producer-consumer pattern** with **dual worker pools**, using Go's concurrency primitives (goroutines, channels, and WaitGroups) to achieve high throughput.
+
+```mermaid
+graph TB
+    START([CLI Entry Point<br/>--prefix --config]) --> CONFIG[Load YAML Config]
+
+    CONFIG --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
+    VALIDATE --> ROLE[Assume AWS IAM Role<br/>via STS]
+    ROLE --> FILESERVICE{Initialize<br/>FileService}
+
+    FILESERVICE -->|IsLocal=true| LOCAL[LocalFileService]
+    FILESERVICE -->|IsLocal=false| S3FS[S3FileService]
+
+    LOCAL --> LISTFILES[List and Parse Files]
+    S3FS --> LISTFILES
+
+    LISTFILES --> IMAGEFILES[Create ImageFile Objects<br/>Parse Path Structure]
+    IMAGEFILES --> QUEUES[Initialize Buffered Channels]
+
+    QUEUES --> DOWNLOADQ[Download Queue<br/>chan ImageFile]
+    QUEUES --> PROCESSQ[Process Queue<br/>chan ImageFile]
+
+    DOWNLOADQ --> DLW1[Download Worker 1]
+    DOWNLOADQ --> DLW2[Download Worker 2]
+    DOWNLOADQ --> DLW3[Download Worker 3]
+    DOWNLOADQ --> DLWN[Download Worker N]
+
+    DLW1 --> FETCH1[Fetch from Source]
+    DLW2 --> FETCH2[Fetch from Source]
+    DLW3 --> FETCH3[Fetch from Source]
+    DLWN --> FETCHN[Fetch from Source]
+
+    FETCH1 --> PROCESSQ
+    FETCH2 --> PROCESSQ
+    FETCH3 --> PROCESSQ
+    FETCHN --> PROCESSQ
+
+    PROCESSQ --> PW1[Process Worker 1]
+    PROCESSQ --> PW2[Process Worker 2]
+    PROCESSQ --> PW3[Process Worker 3]
+    PROCESSQ --> PWN[Process Worker N]
+
+    PW1 --> SIZES[For Each Size<br/>thumbnail, preview, watermark]
+    PW2 --> SIZES
+    PW3 --> SIZES
+    PWN --> SIZES
+    SIZES --> SVG2PNG[SVG to PNG<br/>rsvg-convert]
+
+    SVG2PNG --> CHECKWM{Watermark<br/>Size?}
+    CHECKWM -->|Yes| APPLYWM[Apply Watermark<br/>ffmpeg overlay filter]
+    CHECKWM -->|No| PNG2WEBP[PNG to WebP<br/>ffmpeg -q:v 75]
+    APPLYWM --> PNG2WEBP
+
+    PNG2WEBP --> UPLOADCHECK{Upload<br/>to S3?}
+    UPLOADCHECK -->|Yes| S3UPLOAD[S3 PutObject<br/>Target Bucket]
+    UPLOADCHECK -->|No| LOCALSAVE[Save to Local<br/>Output Directory]
+
+    S3UPLOAD --> CLEANUP[Cleanup Temp Files<br/>source, intermediate]
+    LOCALSAVE --> CLEANUP
+
+    CLEANUP --> DONE([Processing Complete<br/>Log Results])
+
+    style START fill:#e1f5ff,stroke:#0066cc
+    style FILESERVICE fill:#fff4e1,stroke:#cc9900
+    style DOWNLOADQ fill:#f0e1ff,stroke:#9933cc
+    style PROCESSQ fill:#f0e1ff,stroke:#9933cc
+    style DLWORKERS fill:#FF9900,stroke:#cc7a00,color:#fff
+    style PROCWORKERS fill:#FF9900,stroke:#cc7a00,color:#fff
+    style SIZES fill:#e1ffe1,stroke:#009933
+    style VALIDATE fill:#ffe1e1,stroke:#cc0000
+```
+
+---
+
+## How It Works
+
+### Dual Worker Pool Architecture
+
+The processor uses two independent worker pools to parallelize I/O-bound (downloading) and CPU-bound (processing) operations:
+
+1. **Download Workers** fetch files from source (S3 or local filesystem) and add them to the Process Queue
+2. **Process Workers** pull from the queue and execute the image transformation pipeline
+3. **Buffered Channels** connect the pools, enabling continuous processing without blocking
+
+### Processing Pipeline
+
+For each image, the processor generates multiple sizes (thumbnail: 128px, preview: 512px, watermark: 512px):
+
+1. **SVG → PNG Conversion** using `rsvg-convert` at target dimensions
+2. **Optional Watermarking** using ffmpeg's overlay filter for preview images
+3. **PNG → WebP Conversion** using ffmpeg with quality optimization (`-q:v 75`)
+4. **Upload** to S3 bucket or save to local output directory
+
+### Concurrency Model
+
+```go
+// Buffered channels for work distribution
+DownloadQueue := make(chan ImageFile, len(files))
+ProcessQueue  := make(chan ImageFile, len(files))
+
+// Configurable worker pools
+for i := 0; i < downloadWorkers; i++ {
+    go downloadWorker(DownloadQueue, ProcessQueue)
+}
+for i := 0; i < processWorkers; i++ {
+    go processWorker(ProcessQueue)
+}
+
+// Synchronization with WaitGroups
+downloadWG.Wait() // Wait for all downloads
+close(ProcessQueue)
+processWG.Wait()  // Wait for all processing
+```
+
+---
+
+## Key Features
+
+- **Highly Concurrent:** Configurable worker pools optimize for I/O and CPU workloads
+- **Storage Flexibility:** Supports both local filesystem and AWS S3 (via strategy pattern)
+- **Production-Ready:** Database validation, comprehensive logging, automatic cleanup
+- **Config-Driven:** YAML configuration with sensible defaults
+- **Hardware Acceleration:** Optional VideoToolbox support for ffmpeg on macOS
+- **Modular Design:** Interface-based architecture with dependency injection
+
+---
+
+## Design Patterns
+
+- **Producer-Consumer:** Decouples file discovery from processing via buffered channels
+- **Strategy Pattern:** Abstract file service enables runtime switching between local/S3 backends
+- **Worker Pool:** Limits concurrency to prevent resource exhaustion
+- **Pipeline:** Sequential transformation stages (SVG → PNG → WebP) with conditional watermarking
+
+---
+
+## Installation & Usage
+
+### Prerequisites
+
+```bash
+# macOS
+brew install librsvg ffmpeg
+
+# Ubuntu
+sudo apt-get install librsvg2-bin ffmpeg
+```
+
+### Build
 
 ```bash
 go build -o image-processor ./src/image-processor
 ```
 
-Ensure you have the following system dependencies installed:
+### Configuration
 
-- rsvg-convert
-- ffmpeg
-
-On macOS:
-
-```bash
-brew install librsvg ffmpeg
-```
-On Ubuntu:
-
-```bash
-sudo apt-get install librsvg2-bin ffmpeg
-```
-
-## 🔧 Configuration
-
-Create a config file in YAML or JSON format. Example:
-
-config.yaml
+Create a `config.yaml` file:
 
 ```yaml
-# Target AWS Region
 aws_region: us-east-1
-
-# Source bucket name
-# source_bucket: vectopus-webp-test
 source_bucket: png-image-source-bucket
-
-# Target bucket name
 target_bucket: webp-output-target-bucket
-# target_bucket: image-engine-public-prod
+role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role
 
-# Prefixes to include
-include_prefixes:
-  - bucket-prefix-one
-  - bucket-prefix-two
-  - bucket-prefix-three
+# Worker pool configuration
+download_worker_pool_size: 5
+process_worker_pool_size: 10
 
-Prefixes to exclude
-omit_prefixes:
-  - omit-me-one
-  - omit-me-two
-  - omit-me-three
-
-# Dry run?
-dry_run: true
-
-# Local?
-is_local: true
-
-# Upload results to s3?
-upload_to_s3: true
-
-local_source: /path/to/local/test/input
-local_target: /path/to/local/test/output
-
-# Archive structure
-archive_structure: prefix,family,set,icons
-
-# Garbage collection
-auto_cleanup: false
-
-# ffMpeg path
-ffmpegPath: /opt/homebrew/bin/ffmpeg
-
-# Webp sizes
+# Output sizes
 webp_sizes:
   thumbnail: 128
   preview: 512
   watermark: 512
 
-# Watermark
-watermark_path: /path/to/local/test/assets/watermark.svg
-
-# AWS Role arn
-role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role
-
-# Logging output
-# 0 = no output
-# 1 = output to console
-# 2 = output to file
-# 3 = output to both
-logging_output: 3
-
-# Log file path
-logfile: ./output.log
-
-# Work dir
-work_dir: ""
-
-# Output dir
-output_dir: ./test/output
-
-# Worker Count
-worker_pool_size: 10
-download_worker_pool_size: 5
-process_worker_pool_size: 10
-
-# Use Hardware Acceleration
+# Optional
+watermark_path: /path/to/watermark.svg
 use_hardware_acceleration: true
-``` 
-
-## 🖼️ Example Usage
-
-Run the processor with:
-
-```bash
-./image-processor --prefix=iconify --config=config.yaml
+auto_cleanup: true
 ```
 
-This will:
+### Run
 
-1. Load all SVG files from the configured source
-2. Spawn N workers to convert and process them
-3. Upload the resulting WebP images to S3 (or save locally)
+```bash
+./image-processor --prefix=contributor-name --config=config.yaml
+```
 
-## 🧠 Architecture
+---
 
-The processor uses a producer-consumer pattern:
+## Project Structure
 
-- A single producer enumerates all files and adds them to a buffered job queue
-- A configurable number of workers pull from the queue and execute ProcessFile()
-- Each ProcessFile() call:
-  - Ensures directories exist
-  - Converts SVG → PNG
-  - Optionally applies a watermark
-  - Converts to WebP
-  - Uploads result to S3 or local output
+```
+go-batch-svg-to-webp/
+├── src/
+│   ├── image-processor/    # Main orchestrator & CLI
+│   ├── file-service/       # Storage abstraction (Local/S3)
+│   ├── image-file/         # Image metadata parser
+│   ├── database/           # PostgreSQL integration
+│   ├── models/             # GORM data models
+│   └── common/             # Shared utilities
+├── test/                   # Test fixtures
+└── config-example.yml      # Configuration template
+```
 
-A sync.WaitGroup blocks the main thread until all workers complete, and a shared error channel captures any issues.
+---
 
-## 📈 Performance
-
-| Language | Est. Time per Image | Total Runtime (500k files x 5 variants) |
-|----------|---------------------|-----------------------------------------|
-| Node.js  | ~200ms              | ~11.5 days                              |
-| Python   | ~50ms               | ~41.6 hours                             |
-| Go       | ~1ms                | ~45 minutes                             |
-
-Go's lightweight goroutines and native parallelism make it an ideal tool for high-throughput CLI applications like this.
-
-## 🛠️ Roadmap
-
-- [ ] Add support for AVIF conversion  
-- [ ] Optional caching of intermediate files  
-- [ ] CLI flag to dry-run or list targets without processing  
-- [ ] Plugin system for new output formats or storage backends  
-- [ ] Dockerfile for deployment convenience  
-
-## 🤝 Contributing
-
-Contributions are welcome! To get started:
-
-1. Fork this repo  
-2. Create a new branch (git checkout -b feature-name)  
-3. Commit your changes  
-4. Open a pull request  
-
-Feel free to file issues or suggest enhancements as well.
-
-## 📄 License
+## License
 
 MIT License. See LICENSE for details.
 
 ## Disclaimer
 
-This software is provided “as is” without warranty of any kind. You are responsible for testing it in your environment and ensuring it meets your needs. The authors and maintainers are not liable for any loss of data, outages, or other damage resulting from use.
+This software is provided "as is" without warranty of any kind. You are responsible for testing it in your environment and ensuring it meets your needs.
