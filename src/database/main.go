@@ -27,10 +27,11 @@ type Config struct {
 }
 
 func init() {
-	// Load the .env file during package initialization
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+	// Load the .env file during package initialization. A missing .env is not
+	// fatal: configuration may be provided directly via environment variables
+	// (e.g. in CI or production), so we only log a notice and continue.
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file loaded (%v); falling back to environment variables", err)
 	}
 }
 
