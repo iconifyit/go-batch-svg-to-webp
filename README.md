@@ -198,6 +198,9 @@ processWG.Wait()  // Wait for all processing
 
 ### Prerequisites
 
+- **Go 1.22+**
+- **rsvg-convert** and **ffmpeg** on your PATH:
+
 ```bash
 # macOS
 brew install librsvg ffmpeg
@@ -206,21 +209,36 @@ brew install librsvg ffmpeg
 sudo apt-get install librsvg2-bin ffmpeg
 ```
 
-### Build
+- **AWS credentials** (via `~/.aws` or environment) that can assume the IAM role named in `config.yml`. The `setup.sh` script creates a suitable role with read/write access to your S3 buckets.
+- **PostgreSQL** reachable with a `users` table containing the contributor you process. The contributor name passed on the command line is validated against this table at startup.
+
+### Environment
+
+The database connection is configured through a `.env` file in the project root (never commit this file — it is gitignored):
 
 ```bash
-go build -o image-processor ./src/image-processor
+POSTGRES_HOST=your-database-host
+POSTGRES_PORT=5432
+POSTGRES_USER=your-database-user
+POSTGRES_PASS=your-database-password
+POSTGRES_DB=your-database-name
 ```
+
+If no `.env` file exists, the same variables are read from the process environment.
 
 ### Configuration
 
-Create a `config.yaml` file:
+Copy `config-example.yml` to `config.yml` and adjust it. The values that matter most for a local run:
 
 ```yaml
 aws_region: us-east-1
-source_bucket: png-image-source-bucket
-target_bucket: webp-output-target-bucket
-role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role
+role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role  # role your AWS user can assume
+
+# Local mode: read SVGs from local_source instead of S3
+is_local: true
+upload_to_s3: false
+local_source: /path/to/svg/input        # tree of {contributor}/{icons|illustrations}/{familyID}/{setID}/*.svg
+local_target: /path/to/webp/output
 
 # Worker pool configuration
 download_worker_pool_size: 5
@@ -232,17 +250,41 @@ webp_sizes:
   preview: 512
   watermark: 512
 
-# Optional
-watermark_path: /path/to/watermark.svg
-use_hardware_acceleration: true
-auto_cleanup: true
+ffmpegPath: /opt/homebrew/bin/ffmpeg    # output of `which ffmpeg`
+watermark_path: ./assets/watermark.svg
+work_dir: ./tmp/work
+use_hardware_acceleration: true          # VideoToolbox on macOS
+```
+
+For S3 mode, set `is_local: false` and configure `source_bucket` / `target_bucket` instead of the local paths.
+
+### Build
+
+```bash
+./build.sh            # runs: go build -o image-processor main.go
 ```
 
 ### Run
 
+The recommended entry point is the wrapper script, which builds the binary, mounts a 4GB RAM disk for intermediate files, points `work_dir` at it, runs the processor, and restores your config afterward:
+
 ```bash
-./image-processor --prefix=contributor-name --config=config.yaml
+./run.sh
 ```
+
+To run the binary directly:
+
+```bash
+./image-processor -f config.yml -c contributor-name
+```
+
+### Test
+
+```bash
+go test ./...
+```
+
+The suite is self-contained: database tests verify generated SQL against a dry-run ORM session (no database needed), S3 tests run against an injected mock client (no AWS needed), and the two conversion tests skip automatically when `rsvg-convert`/`ffmpeg` are not installed.
 
 ---
 
@@ -250,14 +292,16 @@ auto_cleanup: true
 
 ```
 go-batch-svg-to-webp/
+├── main.go                 # CLI entry point
 ├── src/
-│   ├── image-processor/    # Main orchestrator & CLI
+│   ├── image-processor/    # Main orchestrator, config, pipeline
 │   ├── file-service/       # Storage abstraction (Local/S3)
 │   ├── image-file/         # Image metadata parser
 │   ├── database/           # PostgreSQL integration
 │   ├── models/             # GORM data models
 │   └── common/             # Shared utilities
-├── test/                   # Test fixtures
+├── docs/                   # Code overview, spec, roadmap
+├── build.sh / run.sh       # Build and RAM-disk run wrappers
 └── config-example.yml      # Configuration template
 ```
 
