@@ -47,5 +47,5 @@ fixtures/*
 config.yml
 config_run.yml
 
-# Built binary
-image-processor
+# Built binary (root only - do not match src/image-processor)
+/image-processor
