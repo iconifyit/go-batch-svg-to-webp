@@ -13,32 +13,57 @@ func stringPtr(s string) *string {
 }
 
 // TestShouldInclude verifies the include/exclude prefix filtering contract.
+// Prefixes match against the source-root-relative path, so the same config
+// works for S3 object keys and absolute local paths alike.
 func TestShouldInclude(t *testing.T) {
 	tests := []struct {
 		name     string
-		include  []string
-		exclude  []string
+		config   Config
 		filePath *string
 		want     bool
 	}{
 		// Scenario: nil path can never be included.
-		{"nil path", nil, nil, nil, false},
+		{"nil path", Config{}, nil, false},
 		// Scenario: hidden files are always excluded.
-		{"hidden file", nil, nil, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/.DS_Store"), false},
+		{"hidden file", Config{}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/.DS_Store"), false},
 		// Scenario: no include/exclude rules includes every visible file.
-		{"no rules includes all", nil, nil, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
+		{"no rules includes all", Config{}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
 		// Scenario: file under an excluded prefix is dropped.
-		{"excluded prefix", nil, []string{"iconify/illustrations"}, stringPtr("iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"), false},
+		{"excluded prefix", Config{Exclude: []string{"iconify/illustrations"}}, stringPtr("iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"), false},
 		// Scenario: file matching an include prefix is kept.
-		{"include match", []string{"iconify/icons"}, nil, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
+		{"include match", Config{Include: []string{"iconify/icons"}}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
 		// Scenario: file outside all include prefixes is dropped.
-		{"include miss", []string{"iconify/icons"}, nil, stringPtr("vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg"), false},
+		{"include miss", Config{Include: []string{"iconify/icons"}}, stringPtr("vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg"), false},
 		// Scenario: exclusion wins over inclusion for the same file.
-		{"exclude beats include", []string{"iconify"}, []string{"iconify/icons"}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), false},
+		{"exclude beats include", Config{Include: []string{"iconify"}, Exclude: []string{"iconify/icons"}}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), false},
+		// Scenario: local mode - absolute walk path matches a contributor
+		// prefix because the configured source root is stripped first.
+		{
+			"local absolute path include match",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: local mode - absolute path for a different contributor
+		// is dropped by the include list.
+		{
+			"local absolute path include miss",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg"),
+			false,
+		},
+		// Scenario: local mode - exclusion applies to the relative path.
+		{
+			"local absolute path excluded",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Exclude: []string{"iconify/illustrations"}},
+			stringPtr("/Users/converter/source/iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"),
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{Config: &Config{Include: tt.include, Exclude: tt.exclude}}
+			config := tt.config
+			ip := &ImageProcessor{Config: &config}
 			if got := ip.ShouldInclude(tt.filePath); got != tt.want {
 				t.Errorf("ShouldInclude() = %v, want %v", got, tt.want)
 			}

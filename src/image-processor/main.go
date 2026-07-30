@@ -213,7 +213,10 @@ func (ip *ImageProcessor) SetupLogging() error {
 	return nil
 }
 
-// ShouldInclude checks if a file should be included based on the include and exclude lists
+// ShouldInclude checks if a file should be included based on the include and
+// exclude lists. Prefixes are matched against the path relative to the
+// configured source root (LocalSource for local runs, SourceBucket for S3),
+// so absolute local paths and S3 object keys are filtered consistently.
 func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	include := ip.Config.Include
 	exclude := ip.Config.Exclude
@@ -222,10 +225,6 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 		return false
 	}
 
-	log.Printf("Should Include file: %s", *filePath)
-	log.Printf("Include: %v", include)
-	log.Printf("Exclude: %v\n", exclude)
-
 	fileName := filepath.Base(*filePath)
 
 	// Exclude hidden files (e.g., .DS_Store or files starting with '.')
@@ -233,10 +232,18 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 		return false
 	}
 
+	// Strip the source root so prefixes like "iconify" match regardless of
+	// where the source tree lives on disk.
+	sourceRoot := ip.Config.SourceBucket
+	if ip.Config.IsLocal {
+		sourceRoot = ip.Config.LocalSource
+	}
+	relPath := strings.TrimPrefix(*filePath, sourceRoot)
+	relPath = strings.TrimPrefix(relPath, "/")
+
 	// Check for exclusion
 	for _, prefix := range exclude {
-		log.Printf("Checking prefix: %s - %s", prefix, *filePath)
-		if strings.HasPrefix(*filePath, prefix) {
+		if strings.HasPrefix(relPath, prefix) {
 			return false // Exclude the file if it matches any prefix in `exclude`
 		}
 	}
@@ -248,7 +255,7 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 
 	// Check for inclusion
 	for _, prefix := range include {
-		if strings.HasPrefix(*filePath, prefix) {
+		if strings.HasPrefix(relPath, prefix) {
 			return true
 		}
 	}
@@ -267,7 +274,7 @@ func (ip *ImageProcessor) ListFiles() ([]string, error) {
 	}
 	return ip.FileService.ListFiles(
 		fileservice.ListFilesInput{SourceRoot: sourceRoot},
-		nil, // ip.ShouldInclude,
+		ip.ShouldInclude,
 	)
 }
 
