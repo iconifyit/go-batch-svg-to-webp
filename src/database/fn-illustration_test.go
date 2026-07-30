@@ -1,109 +1,65 @@
 package database
 
 import (
-	"reflect"
 	"testing"
-
-	"github.com/iconifyit/go-batch-svg-to-webp/src/models"
 
 	"gorm.io/gorm"
 )
 
-func TestDatabaseService_GetIllustrationById(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIllustrationById_QueryShape verifies the primary-key lookup queries
+// the illustrations table by id with a single-row limit.
+func TestGetIllustrationById_QueryShape(t *testing.T) {
+	// Scenario: fetch illustration 88 by primary key.
+	svc, capture := newCaptureService(t)
+
+	if _, err := svc.GetIllustrationById(88); err != nil {
+		t.Fatalf("GetIllustrationById() error = %v", err)
 	}
-	type args struct {
-		id int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Illustration
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIllustrationById(tt.args.id)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIllustrationById() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIllustrationById() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "illustrations"`, `"id" = $`, "LIMIT")
+	if !containsVar(capture.lastVars(t), 88) {
+		t.Errorf("bind variables %v do not include id 88", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetIllustration(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIllustration_AppliesFilters verifies custom filters land in the
+// WHERE clause of the single-row illustrations query.
+func TestGetIllustration_AppliesFilters(t *testing.T) {
+	// Scenario: fetch the mountain-sunrise illustration by slug.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetIllustration(QueryParams{
+		Filters: []func(tx *gorm.DB) *gorm.DB{Where("slug", "mountain-sunrise")},
+	})
+	if err != nil {
+		t.Fatalf("GetIllustration() error = %v", err)
 	}
-	type args struct {
-		params QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Illustration
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIllustration(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIllustration() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIllustration() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "illustrations"`, "slug = $", "LIMIT")
+	if !containsVar(capture.lastVars(t), "mountain-sunrise") {
+		t.Errorf("bind variables %v do not include slug mountain-sunrise", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetIllustrations(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIllustrations_OrderLimitOffset verifies Order, Limit, and Offset
+// shape the multi-row illustrations query.
+func TestGetIllustrations_OrderLimitOffset(t *testing.T) {
+	// Scenario: first 30 illustrations for a family, newest first.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetIllustrations(QueryParams{
+		Order: "created_at desc",
+		Limit: 30,
+	})
+	if err != nil {
+		t.Fatalf("GetIllustrations() error = %v", err)
 	}
-	type args struct {
-		params QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []models.Illustration
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIllustrations(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIllustrations() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIllustrations() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "illustrations"`, "ORDER BY created_at desc", "LIMIT")
+	if !containsVar(capture.lastVars(t), 30) {
+		t.Errorf("bind variables %v do not include limit 30", capture.lastVars(t))
 	}
 }

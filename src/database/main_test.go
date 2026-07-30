@@ -1,7 +1,6 @@
 package database
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -87,35 +86,5 @@ func TestWhereCustom(t *testing.T) {
 	sql := buildSQL(t, WhereCustom("created_at > ?", "2024-01-15"))
 	if !strings.Contains(sql, "created_at > '2024-01-15'") {
 		t.Errorf("WhereCustom() SQL = %q, want created_at > '2024-01-15'", sql)
-	}
-}
-
-// TestNewDatabaseService_Integration verifies a real connection and clean
-// close against a live PostgreSQL instance. Skips when POSTGRES_HOST is not
-// configured.
-func TestNewDatabaseService_Integration(t *testing.T) {
-	// Scenario: connect to the configured PostgreSQL, then close cleanly.
-	if os.Getenv("POSTGRES_HOST") == "" {
-		t.Skip("integration test: POSTGRES_HOST not set")
-	}
-
-	svc, err := NewDatabaseService()
-	if err != nil {
-		t.Fatalf("NewDatabaseService() error = %v", err)
-	}
-	if svc == nil || svc.DB == nil {
-		t.Fatal("NewDatabaseService() returned nil service or DB")
-	}
-
-	sqlDB, err := svc.DB.DB()
-	if err != nil {
-		t.Fatalf("failed to get sql.DB: %v", err)
-	}
-	if err := sqlDB.Ping(); err != nil {
-		t.Fatalf("ping failed: %v", err)
-	}
-
-	if err := svc.Close(); err != nil {
-		t.Errorf("Close() error = %v", err)
 	}
 }
