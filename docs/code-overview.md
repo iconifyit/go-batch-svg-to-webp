@@ -74,7 +74,6 @@ go-batch-svg-to-webp/
 │   │   ├── config.go            # Config struct and YAML parsing
 │   │   ├── funcs.go             # Processing functions (SVG->PNG->WebP)
 │   │   ├── IImageProcessor.go   # Interface definition
-│   │   ├── main-v2.go           # Legacy/backup implementation (commented)
 │   │   ├── main_test.go         # Unit tests
 │   │   ├── funcs_test.go        # Function tests
 │   │   └── config_test.go       # Config tests
@@ -119,8 +118,7 @@ go-batch-svg-to-webp/
 │       ├── MockLocalFileService.go
 │       ├── MockImageProcessor.go
 │       └── MockS3FileService.go
-├── test/                        # Test fixtures (SVG files)
-├── vendor/                      # Vendored dependencies
+├── test/                        # Test fixtures (SVG files; not committed - supply your own)
 ├── aws/iam/policies/            # AWS IAM policy definitions
 ├── docs/                        # Documentation
 └── .github/                     # GitHub workflows
