@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 type S3FileService struct {
@@ -22,6 +23,19 @@ type S3FileService struct {
 	ObjectKey    string
 	SourceBucket string
 	TargetBucket string
+
+	// Client is the S3 API used by this service. Leave nil in production to
+	// build a real client from Session; inject a fake in tests.
+	Client s3iface.S3API
+}
+
+// client returns the injected S3 API when set, otherwise a real client
+// built from the AWS session.
+func (svc *S3FileService) client() s3iface.S3API {
+	if svc.Client != nil {
+		return svc.Client
+	}
+	return s3.New(svc.Session)
 }
 
 func NewS3FileService(config *ServiceInput) IFileService {
@@ -53,7 +67,7 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 		input.Bucket = svc.BucketName
 	}
 	log.Printf("svc.Session: %v", svc.Session)
-	client := s3.New(svc.Session)
+	client := svc.client()
 	file, err := os.Open(input.SourceFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %v", err)
@@ -72,7 +86,7 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 // ListFiles lists files in the source directory
 func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) bool) ([]string, error) {
 	var files []string
-	client := s3.New(svc.Session)
+	client := svc.client()
 	err := client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
 		Bucket: aws.String(svc.BucketName),
 	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -102,7 +116,7 @@ func (svc *S3FileService) ToImageFiles(files []string) ([]*imagefile.ImageFile, 
 
 // Downloads a file from an s3 bucket.
 func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
-	client := s3.New(svc.Session)
+	client := svc.client()
 	s3Object, err := client.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(svc.SourceBucket),
 		Key:    aws.String(file.ObjectKey),
@@ -129,7 +143,7 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 
 // Checks if an object exists in an s3 bucket.
 func (svc *S3FileService) Exists(objectKey string) (bool, error) {
-	client := s3.New(svc.Session)
+	client := svc.client()
 	_, err := client.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(svc.BucketName),
 		Key:    aws.String(objectKey),
@@ -142,7 +156,7 @@ func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 
 // Upload object to S3 bucket
 func (svc *S3FileService) Upload(localPath, objectKey string) error {
-	client := s3.New(svc.Session)
+	client := svc.client()
 	fileBuffer, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %v", err)
