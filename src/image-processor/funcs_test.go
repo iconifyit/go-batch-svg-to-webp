@@ -1,441 +1,172 @@
 package imageprocessor
 
 import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"testing"
-
-	"github.com/aws/aws-sdk-go/aws/session"
-	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
-	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 )
 
-func TestImageProcessor_ConvertSVGToPNG(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		svgPath string
-		pngPath string
-		size    int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.ConvertSVGToPNG(tt.args.svgPath, tt.args.pngPath, tt.args.size); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ConvertSVGToPNG() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+// realisticSVG is a minimal but valid icon SVG used as a conversion fixture.
+const realisticSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="10" fill="#333"/>
+  <rect x="8" y="8" width="8" height="8" fill="#fff"/>
+</svg>`
 
-func TestImageProcessor_RunFFmpeg(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		input  string
-		output string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.RunFFmpeg(tt.args.input, tt.args.output); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.RunFFmpeg() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_Watermark(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		inputFilePath  string
-		outputFilePath string
-		size           int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.Watermark(tt.args.inputFilePath, tt.args.outputFilePath, tt.args.size); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.Watermark() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_LoadWatermark(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		want    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			got, err := ip.LoadWatermark()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.LoadWatermark() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("ImageProcessor.LoadWatermark() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_ProcessFile(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		imgFile imagefile.ImageFile
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.ProcessFile(tt.args.imgFile); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ProcessFile() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
+// TestImageProcessor_CopyFile verifies byte-for-byte copying into the work
+// directory.
 func TestImageProcessor_CopyFile(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+	// Scenario: copy a downloaded SVG into the processing source dir.
+	dir := t.TempDir()
+	src := filepath.Join(dir, "coffee-cup.svg")
+	dst := filepath.Join(dir, "coffee-cup-copy.svg")
+	if err := os.WriteFile(src, []byte(realisticSVG), 0644); err != nil {
+		t.Fatalf("failed to seed source: %v", err)
 	}
-	type args struct {
-		src string
-		dst string
+
+	ip := &ImageProcessor{Config: &Config{}}
+	if err := ip.CopyFile(src, dst); err != nil {
+		t.Fatalf("CopyFile() error = %v", err)
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("failed to read copy: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.CopyFile(tt.args.src, tt.args.dst); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.CopyFile() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	if string(got) != realisticSVG {
+		t.Errorf("copied content differs from source")
 	}
 }
 
-func TestImageProcessor_RenameFolderWithTimestamp(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		folderPath string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.RenameFolderWithTimestamp(tt.args.folderPath); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.RenameFolderWithTimestamp() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+// TestImageProcessor_CopyFile_MissingSource verifies the error contract.
+func TestImageProcessor_CopyFile_MissingSource(t *testing.T) {
+	// Scenario: the source file was already cleaned up.
+	dir := t.TempDir()
+	ip := &ImageProcessor{Config: &Config{}}
+	if err := ip.CopyFile(filepath.Join(dir, "missing.svg"), filepath.Join(dir, "out.svg")); err == nil {
+		t.Fatal("CopyFile() with missing source: expected error, got nil")
 	}
 }
 
-func TestImageProcessor_downloadWorker(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestRenameFolderWithTimestamp verifies the folder is renamed to a
+// timestamp-formatted name in the same parent, preserving contents.
+func TestRenameFolderWithTimestamp(t *testing.T) {
+	// Scenario: a completed output folder is archived under a timestamp name.
+	// The timestamp itself is wall-clock dependent, so the assertion pins the
+	// documented name format rather than an exact time.
+	parent := t.TempDir()
+	folder := filepath.Join(parent, "output")
+	if err := os.MkdirAll(folder, 0755); err != nil {
+		t.Fatalf("failed to create folder: %v", err)
 	}
-	type args struct {
-		id        int
-		errorChan chan<- error
+	inner := filepath.Join(folder, "coffee-cup-thumbnail.webp")
+	if err := os.WriteFile(inner, []byte("RIFFxxxxWEBP"), 0644); err != nil {
+		t.Fatalf("failed to seed file: %v", err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
+
+	ip := &ImageProcessor{Config: &Config{}}
+	if err := ip.RenameFolderWithTimestamp(folder); err != nil {
+		t.Fatalf("RenameFolderWithTimestamp() error = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			ip.downloadWorker(tt.args.id, tt.args.errorChan)
-		})
+
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Errorf("original folder still exists after rename")
+	}
+
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("failed to read parent dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("parent contains %d entries, want exactly 1 renamed folder", len(entries))
+	}
+	timestampName := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$`)
+	renamed := entries[0].Name()
+	if !timestampName.MatchString(renamed) {
+		t.Errorf("renamed folder = %q, want YYYY-MM-DD-HH-MM-SS format", renamed)
+	}
+
+	// The folder's contents must survive the rename.
+	if _, err := os.Stat(filepath.Join(parent, renamed, "coffee-cup-thumbnail.webp")); err != nil {
+		t.Errorf("renamed folder lost its contents: %v", err)
 	}
 }
 
-func TestImageProcessor_downloadFile(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		file *imagefile.ImageFile
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			got, err := ip.downloadFile(tt.args.file)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.downloadFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("ImageProcessor.downloadFile() = %v, want %v", got, tt.want)
-			}
-		})
+// TestRenameFolderWithTimestamp_MissingFolder verifies the error contract.
+func TestRenameFolderWithTimestamp_MissingFolder(t *testing.T) {
+	// Scenario: the folder to archive does not exist.
+	ip := &ImageProcessor{Config: &Config{}}
+	if err := ip.RenameFolderWithTimestamp(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("RenameFolderWithTimestamp() with missing folder: expected error, got nil")
 	}
 }
 
-func TestImageProcessor_processWorker(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestConvertSVGToPNG is an integration test for the rsvg-convert pipeline
+// stage. Skips when rsvg-convert is not installed.
+func TestConvertSVGToPNG(t *testing.T) {
+	// Scenario: a 24x24 icon SVG is rasterized to a 128px PNG.
+	if _, err := exec.LookPath("rsvg-convert"); err != nil {
+		t.Skip("integration test: rsvg-convert not installed")
 	}
-	type args struct {
-		id        int
-		errorChan chan<- error
+
+	dir := t.TempDir()
+	svgPath := filepath.Join(dir, "coffee-cup.svg")
+	pngPath := filepath.Join(dir, "coffee-cup-thumbnail.png")
+	if err := os.WriteFile(svgPath, []byte(realisticSVG), 0644); err != nil {
+		t.Fatalf("failed to seed SVG: %v", err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
+
+	ip := &ImageProcessor{Config: &Config{}}
+	if err := ip.ConvertSVGToPNG(svgPath, pngPath, 128); err != nil {
+		t.Fatalf("ConvertSVGToPNG() error = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			ip.processWorker(tt.args.id, tt.args.errorChan)
-		})
+
+	content, err := os.ReadFile(pngPath)
+	if err != nil {
+		t.Fatalf("PNG not created: %v", err)
+	}
+	if !bytes.HasPrefix(content, []byte("\x89PNG")) {
+		t.Errorf("output is not a PNG (magic bytes = %x)", content[:min(4, len(content))])
 	}
 }
 
-func TestImageProcessor_Cleanup(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestRunFFmpeg is an integration test for the PNG-to-WebP pipeline stage,
+// chained after a real rsvg-convert rasterization. Skips when either binary
+// is not installed.
+func TestRunFFmpeg(t *testing.T) {
+	// Scenario: the intermediate 128px PNG is converted to WebP.
+	if _, err := exec.LookPath("rsvg-convert"); err != nil {
+		t.Skip("integration test: rsvg-convert not installed")
 	}
-	tests := []struct {
-		name   string
-		fields fields
-	}{
-		// TODO: Add test cases.
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("integration test: ffmpeg not installed")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			ip.Cleanup()
-		})
+
+	dir := t.TempDir()
+	svgPath := filepath.Join(dir, "coffee-cup.svg")
+	pngPath := filepath.Join(dir, "coffee-cup-thumbnail.png")
+	webpPath := filepath.Join(dir, "coffee-cup-thumbnail.webp")
+	if err := os.WriteFile(svgPath, []byte(realisticSVG), 0644); err != nil {
+		t.Fatalf("failed to seed SVG: %v", err)
+	}
+
+	ip := &ImageProcessor{Config: &Config{FFmpegPath: ffmpegPath, UseHardwareAcceleration: false}}
+	if err := ip.ConvertSVGToPNG(svgPath, pngPath, 128); err != nil {
+		t.Fatalf("ConvertSVGToPNG() error = %v", err)
+	}
+	if err := ip.RunFFmpeg(pngPath, webpPath); err != nil {
+		t.Fatalf("RunFFmpeg() error = %v", err)
+	}
+
+	content, err := os.ReadFile(webpPath)
+	if err != nil {
+		t.Fatalf("WebP not created: %v", err)
+	}
+	// WebP container: "RIFF" .... "WEBP"
+	if !bytes.HasPrefix(content, []byte("RIFF")) || len(content) < 12 || string(content[8:12]) != "WEBP" {
+		t.Errorf("output is not a WebP container (first 12 bytes = %x)", content[:min(12, len(content))])
 	}
 }

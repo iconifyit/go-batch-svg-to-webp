@@ -1,158 +1,121 @@
 package database
 
 import (
-	"reflect"
+	"os"
+	"strings"
 	"testing"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func TestNewDatabaseService(t *testing.T) {
-	tests := []struct {
-		name    string
-		want    *DatabaseService
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+// newDryRunDB returns a gorm DB that generates SQL without connecting to a
+// database (no ping, dry-run sessions only). This lets the Where* filter
+// helpers be verified against the SQL they actually produce.
+func newDryRunDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(postgres.Open("host=localhost user=none dbname=none"), &gorm.Config{
+		DisableAutomaticPing: true,
+		DryRun:               true,
+	})
+	if err != nil {
+		t.Fatalf("failed to open dry-run gorm DB: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewDatabaseService()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewDatabaseService() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewDatabaseService() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	return db
 }
 
-func TestDatabaseService_Close(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// buildSQL applies a filter scope to a users query and returns the generated
+// SQL with variables inlined.
+func buildSQL(t *testing.T, filter func(tx *gorm.DB) *gorm.DB) string {
+	t.Helper()
+	db := newDryRunDB(t)
+	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		var users []map[string]interface{}
+		return tx.Table("users").Scopes(filter).Find(&users)
+	})
+	if sql == "" {
+		t.Fatal("ToSQL returned empty SQL")
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			if err := svc.Close(); (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.Close() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+	return sql
 }
 
-func TestWhereNot(t *testing.T) {
-	type args struct {
-		column string
-		value  interface{}
-	}
-	tests := []struct {
-		name string
-		args args
-		want func(tx *gorm.DB) *gorm.DB
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := WhereNot(tt.args.column, tt.args.value); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WhereNot() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestWhereIn(t *testing.T) {
-	type args struct {
-		column string
-		values []interface{}
-	}
-	tests := []struct {
-		name string
-		args args
-		want func(tx *gorm.DB) *gorm.DB
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := WhereIn(tt.args.column, tt.args.values); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WhereIn() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestWhereLike(t *testing.T) {
-	type args struct {
-		column  string
-		pattern string
-	}
-	tests := []struct {
-		name string
-		args args
-		want func(tx *gorm.DB) *gorm.DB
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := WhereLike(tt.args.column, tt.args.pattern); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WhereLike() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestWhereCustom(t *testing.T) {
-	type args struct {
-		customCondition string
-		args            []interface{}
-	}
-	tests := []struct {
-		name string
-		args args
-		want func(tx *gorm.DB) *gorm.DB
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := WhereCustom(tt.args.customCondition, tt.args.args...); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WhereCustom() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
+// TestWhere verifies the equality filter produces a WHERE column = value
+// clause.
 func TestWhere(t *testing.T) {
-	type args struct {
-		column string
-		value  interface{}
+	// Scenario: contributor lookup by username.
+	sql := buildSQL(t, Where("username", "iconify"))
+	if !strings.Contains(sql, `username = 'iconify'`) {
+		t.Errorf("Where() SQL = %q, want it to contain username = 'iconify'", sql)
 	}
-	tests := []struct {
-		name string
-		args args
-		want func(tx *gorm.DB) *gorm.DB
-	}{
-		// TODO: Add test cases.
+}
+
+// TestWhereNot verifies the negation filter excludes the given value.
+func TestWhereNot(t *testing.T) {
+	// Scenario: exclude a specific contributor account. gorm renders
+	// map-based Not as a <> comparison.
+	sql := buildSQL(t, WhereNot("username", "iconify"))
+	if !strings.Contains(sql, `"username" <> 'iconify'`) {
+		t.Errorf("WhereNot() SQL = %q, want username <> 'iconify'", sql)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Where(tt.args.column, tt.args.value); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Where() = %v, want %v", got, tt.want)
-			}
-		})
+}
+
+// TestWhereIn verifies the IN filter includes every listed value.
+func TestWhereIn(t *testing.T) {
+	// Scenario: fetch a batch of contributors by username.
+	sql := buildSQL(t, WhereIn("username", []interface{}{"iconify", "vectopus"}))
+	if !strings.Contains(sql, "username IN") {
+		t.Errorf("WhereIn() SQL = %q, want a username IN clause", sql)
+	}
+	if !strings.Contains(sql, "'iconify'") || !strings.Contains(sql, "'vectopus'") {
+		t.Errorf("WhereIn() SQL = %q, want both usernames inlined", sql)
+	}
+}
+
+// TestWhereLike verifies the LIKE filter passes the pattern through.
+func TestWhereLike(t *testing.T) {
+	// Scenario: prefix search over contributor emails.
+	sql := buildSQL(t, WhereLike("email", "scott@%"))
+	if !strings.Contains(sql, "email LIKE 'scott@%'") {
+		t.Errorf("WhereLike() SQL = %q, want email LIKE 'scott@%%'", sql)
+	}
+}
+
+// TestWhereCustom verifies an arbitrary condition and its arguments are
+// rendered into the query.
+func TestWhereCustom(t *testing.T) {
+	// Scenario: contributors created after a cutoff, by raw condition.
+	sql := buildSQL(t, WhereCustom("created_at > ?", "2024-01-15"))
+	if !strings.Contains(sql, "created_at > '2024-01-15'") {
+		t.Errorf("WhereCustom() SQL = %q, want created_at > '2024-01-15'", sql)
+	}
+}
+
+// TestNewDatabaseService_Integration verifies a real connection and clean
+// close against a live PostgreSQL instance. Skips when POSTGRES_HOST is not
+// configured.
+func TestNewDatabaseService_Integration(t *testing.T) {
+	// Scenario: connect to the configured PostgreSQL, then close cleanly.
+	if os.Getenv("POSTGRES_HOST") == "" {
+		t.Skip("integration test: POSTGRES_HOST not set")
+	}
+
+	svc, err := NewDatabaseService()
+	if err != nil {
+		t.Fatalf("NewDatabaseService() error = %v", err)
+	}
+	if svc == nil || svc.DB == nil {
+		t.Fatal("NewDatabaseService() returned nil service or DB")
+	}
+
+	sqlDB, err := svc.DB.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql.DB: %v", err)
+	}
+	if err := sqlDB.Ping(); err != nil {
+		t.Fatalf("ping failed: %v", err)
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
 	}
 }

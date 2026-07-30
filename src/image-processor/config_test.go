@@ -1,374 +1,178 @@
 package imageprocessor
 
 import (
-	"reflect"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestConfig_GetSourceDir(t *testing.T) {
-	type fields struct {
-		Contributor             string
-		SourceBucket            string
-		TargetBucket            string
-		Include                 []string
-		Exclude                 []string
-		Region                  string
-		DryRun                  bool
-		FFmpegPath              string
-		IsLocal                 bool
-		UploadToS3              bool
-		LocalSource             string
-		LocalTarget             string
-		AutoCleanup             bool
-		WebpSizes               map[string]int
-		WatermarkPath           string
-		RoleArn                 string
-		LoggingOutput           int
-		Logfile                 string
-		WorkDir                 string
-		OutputDir               string
-		UseHardwareAcceleration bool
-		WorkerPoolSize          int
-		DownloadWorkerPoolSize  int
-		ProcessWorkerPoolSize   int
+// TestNewConfig_ParsesYAMLAndAppliesDefaults verifies that explicit YAML
+// values are parsed and that unset values receive documented defaults.
+func TestNewConfig_ParsesYAMLAndAppliesDefaults(t *testing.T) {
+	// Scenario: a local-mode config with worker pools and sizes set, but
+	// work_dir, logfile, and region left to default.
+	yaml := `
+is_local: true
+upload_to_s3: false
+local_source: ./test
+local_target: ./test/output
+ffmpegPath: /opt/homebrew/bin/ffmpeg
+watermark_path: ./assets/watermark.svg
+role_arn: arn:aws:iam::000000000000:role/svg-webp-app-role
+webp_sizes:
+  thumbnail: 128
+  preview: 512
+  watermark: 512
+worker_pool_size: 10
+download_worker_pool_size: 5
+process_worker_pool_size: 10
+logging_output: 3
+`
+	path := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatalf("failed to write config fixture: %v", err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   string
-	}{
-		// TODO: Add test cases.
+
+	config, err := NewConfig(path)
+	if err != nil {
+		t.Fatalf("NewConfig() error = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Contributor:             tt.fields.Contributor,
-				SourceBucket:            tt.fields.SourceBucket,
-				TargetBucket:            tt.fields.TargetBucket,
-				Include:                 tt.fields.Include,
-				Exclude:                 tt.fields.Exclude,
-				Region:                  tt.fields.Region,
-				DryRun:                  tt.fields.DryRun,
-				FFmpegPath:              tt.fields.FFmpegPath,
-				IsLocal:                 tt.fields.IsLocal,
-				UploadToS3:              tt.fields.UploadToS3,
-				LocalSource:             tt.fields.LocalSource,
-				LocalTarget:             tt.fields.LocalTarget,
-				AutoCleanup:             tt.fields.AutoCleanup,
-				WebpSizes:               tt.fields.WebpSizes,
-				WatermarkPath:           tt.fields.WatermarkPath,
-				RoleArn:                 tt.fields.RoleArn,
-				LoggingOutput:           tt.fields.LoggingOutput,
-				Logfile:                 tt.fields.Logfile,
-				WorkDir:                 tt.fields.WorkDir,
-				OutputDir:               tt.fields.OutputDir,
-				UseHardwareAcceleration: tt.fields.UseHardwareAcceleration,
-				WorkerPoolSize:          tt.fields.WorkerPoolSize,
-				DownloadWorkerPoolSize:  tt.fields.DownloadWorkerPoolSize,
-				ProcessWorkerPoolSize:   tt.fields.ProcessWorkerPoolSize,
-			}
-			if got := config.GetSourceDir(); got != tt.want {
-				t.Errorf("Config.GetSourceDir() = %v, want %v", got, tt.want)
-			}
-		})
+
+	// Explicit values are preserved.
+	if !config.IsLocal {
+		t.Error("IsLocal = false, want true")
+	}
+	if config.LocalSource != "./test" {
+		t.Errorf("LocalSource = %q, want %q", config.LocalSource, "./test")
+	}
+	if config.WorkerPoolSize != 10 {
+		t.Errorf("WorkerPoolSize = %d, want 10", config.WorkerPoolSize)
+	}
+	if config.DownloadWorkerPoolSize != 5 {
+		t.Errorf("DownloadWorkerPoolSize = %d, want 5", config.DownloadWorkerPoolSize)
+	}
+	if got := config.WebpSizes["thumbnail"]; got != 128 {
+		t.Errorf("WebpSizes[thumbnail] = %d, want 128", got)
+	}
+	if got := config.WebpSizes["preview"]; got != 512 {
+		t.Errorf("WebpSizes[preview] = %d, want 512", got)
+	}
+
+	// Unset values fall back to defaults.
+	if config.WorkDir != "./tmp/work" {
+		t.Errorf("WorkDir default = %q, want %q", config.WorkDir, "./tmp/work")
+	}
+	if config.OutputDir != "./tmp/output" {
+		t.Errorf("OutputDir default = %q, want %q", config.OutputDir, "./tmp/output")
+	}
+	if config.Logfile != "./tmp/image-processor.log" {
+		t.Errorf("Logfile default = %q, want %q", config.Logfile, "./tmp/image-processor.log")
+	}
+	if config.Region != "us-east-1" {
+		t.Errorf("Region default = %q, want %q", config.Region, "us-east-1")
 	}
 }
 
-func TestConfig_GetIntermediateDir(t *testing.T) {
-	type fields struct {
-		Contributor             string
-		SourceBucket            string
-		TargetBucket            string
-		Include                 []string
-		Exclude                 []string
-		Region                  string
-		DryRun                  bool
-		FFmpegPath              string
-		IsLocal                 bool
-		UploadToS3              bool
-		LocalSource             string
-		LocalTarget             string
-		AutoCleanup             bool
-		WebpSizes               map[string]int
-		WatermarkPath           string
-		RoleArn                 string
-		LoggingOutput           int
-		Logfile                 string
-		WorkDir                 string
-		OutputDir               string
-		UseHardwareAcceleration bool
-		WorkerPoolSize          int
-		DownloadWorkerPoolSize  int
-		ProcessWorkerPoolSize   int
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   string
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Contributor:             tt.fields.Contributor,
-				SourceBucket:            tt.fields.SourceBucket,
-				TargetBucket:            tt.fields.TargetBucket,
-				Include:                 tt.fields.Include,
-				Exclude:                 tt.fields.Exclude,
-				Region:                  tt.fields.Region,
-				DryRun:                  tt.fields.DryRun,
-				FFmpegPath:              tt.fields.FFmpegPath,
-				IsLocal:                 tt.fields.IsLocal,
-				UploadToS3:              tt.fields.UploadToS3,
-				LocalSource:             tt.fields.LocalSource,
-				LocalTarget:             tt.fields.LocalTarget,
-				AutoCleanup:             tt.fields.AutoCleanup,
-				WebpSizes:               tt.fields.WebpSizes,
-				WatermarkPath:           tt.fields.WatermarkPath,
-				RoleArn:                 tt.fields.RoleArn,
-				LoggingOutput:           tt.fields.LoggingOutput,
-				Logfile:                 tt.fields.Logfile,
-				WorkDir:                 tt.fields.WorkDir,
-				OutputDir:               tt.fields.OutputDir,
-				UseHardwareAcceleration: tt.fields.UseHardwareAcceleration,
-				WorkerPoolSize:          tt.fields.WorkerPoolSize,
-				DownloadWorkerPoolSize:  tt.fields.DownloadWorkerPoolSize,
-				ProcessWorkerPoolSize:   tt.fields.ProcessWorkerPoolSize,
-			}
-			if got := config.GetIntermediateDir(); got != tt.want {
-				t.Errorf("Config.GetIntermediateDir() = %v, want %v", got, tt.want)
-			}
-		})
+// TestNewConfig_MissingFile verifies the error contract for a nonexistent
+// config path.
+func TestNewConfig_MissingFile(t *testing.T) {
+	// Scenario: the operator passes a path that does not exist.
+	if _, err := NewConfig(filepath.Join(t.TempDir(), "no-such-config.yml")); err == nil {
+		t.Fatal("NewConfig() with missing file: expected error, got nil")
 	}
 }
 
-func TestConfig_GetTargetDir(t *testing.T) {
-	type fields struct {
-		Contributor             string
-		SourceBucket            string
-		TargetBucket            string
-		Include                 []string
-		Exclude                 []string
-		Region                  string
-		DryRun                  bool
-		FFmpegPath              string
-		IsLocal                 bool
-		UploadToS3              bool
-		LocalSource             string
-		LocalTarget             string
-		AutoCleanup             bool
-		WebpSizes               map[string]int
-		WatermarkPath           string
-		RoleArn                 string
-		LoggingOutput           int
-		Logfile                 string
-		WorkDir                 string
-		OutputDir               string
-		UseHardwareAcceleration bool
-		WorkerPoolSize          int
-		DownloadWorkerPoolSize  int
-		ProcessWorkerPoolSize   int
+// TestNewConfig_MalformedYAML verifies the error contract for invalid YAML.
+func TestNewConfig_MalformedYAML(t *testing.T) {
+	// Scenario: the config file contains non-YAML content.
+	path := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(path, []byte("{{ not yaml : ["), 0644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   string
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Contributor:             tt.fields.Contributor,
-				SourceBucket:            tt.fields.SourceBucket,
-				TargetBucket:            tt.fields.TargetBucket,
-				Include:                 tt.fields.Include,
-				Exclude:                 tt.fields.Exclude,
-				Region:                  tt.fields.Region,
-				DryRun:                  tt.fields.DryRun,
-				FFmpegPath:              tt.fields.FFmpegPath,
-				IsLocal:                 tt.fields.IsLocal,
-				UploadToS3:              tt.fields.UploadToS3,
-				LocalSource:             tt.fields.LocalSource,
-				LocalTarget:             tt.fields.LocalTarget,
-				AutoCleanup:             tt.fields.AutoCleanup,
-				WebpSizes:               tt.fields.WebpSizes,
-				WatermarkPath:           tt.fields.WatermarkPath,
-				RoleArn:                 tt.fields.RoleArn,
-				LoggingOutput:           tt.fields.LoggingOutput,
-				Logfile:                 tt.fields.Logfile,
-				WorkDir:                 tt.fields.WorkDir,
-				OutputDir:               tt.fields.OutputDir,
-				UseHardwareAcceleration: tt.fields.UseHardwareAcceleration,
-				WorkerPoolSize:          tt.fields.WorkerPoolSize,
-				DownloadWorkerPoolSize:  tt.fields.DownloadWorkerPoolSize,
-				ProcessWorkerPoolSize:   tt.fields.ProcessWorkerPoolSize,
-			}
-			if got := config.GetTargetDir(); got != tt.want {
-				t.Errorf("Config.GetTargetDir() = %v, want %v", got, tt.want)
-			}
-		})
+	if _, err := NewConfig(path); err == nil {
+		t.Fatal("NewConfig() with malformed YAML: expected error, got nil")
 	}
 }
 
-func TestConfig_GetWorkDir(t *testing.T) {
-	type fields struct {
-		Contributor             string
-		SourceBucket            string
-		TargetBucket            string
-		Include                 []string
-		Exclude                 []string
-		Region                  string
-		DryRun                  bool
-		FFmpegPath              string
-		IsLocal                 bool
-		UploadToS3              bool
-		LocalSource             string
-		LocalTarget             string
-		AutoCleanup             bool
-		WebpSizes               map[string]int
-		WatermarkPath           string
-		RoleArn                 string
-		LoggingOutput           int
-		Logfile                 string
-		WorkDir                 string
-		OutputDir               string
-		UseHardwareAcceleration bool
-		WorkerPoolSize          int
-		DownloadWorkerPoolSize  int
-		ProcessWorkerPoolSize   int
+// TestSetDefaults_ZeroConfig verifies every default applied to an empty
+// config.
+func TestSetDefaults_ZeroConfig(t *testing.T) {
+	// Scenario: a zero-value Config receives all documented defaults.
+	config := &Config{}
+	config.SetDefaults()
+
+	if config.WorkDir != "./tmp/work" {
+		t.Errorf("WorkDir = %q, want %q", config.WorkDir, "./tmp/work")
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   string
-	}{
-		// TODO: Add test cases.
+	if config.OutputDir != "./tmp/output" {
+		t.Errorf("OutputDir = %q, want %q", config.OutputDir, "./tmp/output")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Contributor:             tt.fields.Contributor,
-				SourceBucket:            tt.fields.SourceBucket,
-				TargetBucket:            tt.fields.TargetBucket,
-				Include:                 tt.fields.Include,
-				Exclude:                 tt.fields.Exclude,
-				Region:                  tt.fields.Region,
-				DryRun:                  tt.fields.DryRun,
-				FFmpegPath:              tt.fields.FFmpegPath,
-				IsLocal:                 tt.fields.IsLocal,
-				UploadToS3:              tt.fields.UploadToS3,
-				LocalSource:             tt.fields.LocalSource,
-				LocalTarget:             tt.fields.LocalTarget,
-				AutoCleanup:             tt.fields.AutoCleanup,
-				WebpSizes:               tt.fields.WebpSizes,
-				WatermarkPath:           tt.fields.WatermarkPath,
-				RoleArn:                 tt.fields.RoleArn,
-				LoggingOutput:           tt.fields.LoggingOutput,
-				Logfile:                 tt.fields.Logfile,
-				WorkDir:                 tt.fields.WorkDir,
-				OutputDir:               tt.fields.OutputDir,
-				UseHardwareAcceleration: tt.fields.UseHardwareAcceleration,
-				WorkerPoolSize:          tt.fields.WorkerPoolSize,
-				DownloadWorkerPoolSize:  tt.fields.DownloadWorkerPoolSize,
-				ProcessWorkerPoolSize:   tt.fields.ProcessWorkerPoolSize,
-			}
-			if got := config.GetWorkDir(); got != tt.want {
-				t.Errorf("Config.GetWorkDir() = %v, want %v", got, tt.want)
-			}
-		})
+	if config.WorkerPoolSize != 1 {
+		t.Errorf("WorkerPoolSize = %d, want 1", config.WorkerPoolSize)
+	}
+	if config.DownloadWorkerPoolSize != 1 {
+		t.Errorf("DownloadWorkerPoolSize = %d, want 1", config.DownloadWorkerPoolSize)
+	}
+	if config.Logfile != "./tmp/image-processor.log" {
+		t.Errorf("Logfile = %q, want %q", config.Logfile, "./tmp/image-processor.log")
+	}
+	if config.Region != "us-east-1" {
+		t.Errorf("Region = %q, want %q", config.Region, "us-east-1")
+	}
+	if config.IsLocal {
+		t.Error("IsLocal = true, want false")
+	}
+	if config.AutoCleanup {
+		t.Error("AutoCleanup = true, want false")
 	}
 }
 
-func TestConfig_SetDefaults(t *testing.T) {
-	type fields struct {
-		Contributor             string
-		SourceBucket            string
-		TargetBucket            string
-		Include                 []string
-		Exclude                 []string
-		Region                  string
-		DryRun                  bool
-		FFmpegPath              string
-		IsLocal                 bool
-		UploadToS3              bool
-		LocalSource             string
-		LocalTarget             string
-		AutoCleanup             bool
-		WebpSizes               map[string]int
-		WatermarkPath           string
-		RoleArn                 string
-		LoggingOutput           int
-		Logfile                 string
-		WorkDir                 string
-		OutputDir               string
-		UseHardwareAcceleration bool
-		WorkerPoolSize          int
-		DownloadWorkerPoolSize  int
-		ProcessWorkerPoolSize   int
+// TestSetDefaults_PreservesExplicitValues verifies defaults never overwrite
+// explicitly configured values.
+func TestSetDefaults_PreservesExplicitValues(t *testing.T) {
+	// Scenario: an operator-tuned config keeps its values after SetDefaults.
+	config := &Config{
+		WorkDir:                "/Volumes/image-processor-ramdisk/work",
+		WorkerPoolSize:         10,
+		DownloadWorkerPoolSize: 5,
+		Region:                 "eu-west-1",
+		Logfile:                "./output.log",
 	}
-	tests := []struct {
-		name   string
-		fields fields
-	}{
-		// TODO: Add test cases.
+	config.SetDefaults()
+
+	if config.WorkDir != "/Volumes/image-processor-ramdisk/work" {
+		t.Errorf("WorkDir = %q, want RAM disk path preserved", config.WorkDir)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Contributor:             tt.fields.Contributor,
-				SourceBucket:            tt.fields.SourceBucket,
-				TargetBucket:            tt.fields.TargetBucket,
-				Include:                 tt.fields.Include,
-				Exclude:                 tt.fields.Exclude,
-				Region:                  tt.fields.Region,
-				DryRun:                  tt.fields.DryRun,
-				FFmpegPath:              tt.fields.FFmpegPath,
-				IsLocal:                 tt.fields.IsLocal,
-				UploadToS3:              tt.fields.UploadToS3,
-				LocalSource:             tt.fields.LocalSource,
-				LocalTarget:             tt.fields.LocalTarget,
-				AutoCleanup:             tt.fields.AutoCleanup,
-				WebpSizes:               tt.fields.WebpSizes,
-				WatermarkPath:           tt.fields.WatermarkPath,
-				RoleArn:                 tt.fields.RoleArn,
-				LoggingOutput:           tt.fields.LoggingOutput,
-				Logfile:                 tt.fields.Logfile,
-				WorkDir:                 tt.fields.WorkDir,
-				OutputDir:               tt.fields.OutputDir,
-				UseHardwareAcceleration: tt.fields.UseHardwareAcceleration,
-				WorkerPoolSize:          tt.fields.WorkerPoolSize,
-				DownloadWorkerPoolSize:  tt.fields.DownloadWorkerPoolSize,
-				ProcessWorkerPoolSize:   tt.fields.ProcessWorkerPoolSize,
-			}
-			config.SetDefaults()
-		})
+	if config.WorkerPoolSize != 10 {
+		t.Errorf("WorkerPoolSize = %d, want 10", config.WorkerPoolSize)
+	}
+	if config.DownloadWorkerPoolSize != 5 {
+		t.Errorf("DownloadWorkerPoolSize = %d, want 5", config.DownloadWorkerPoolSize)
+	}
+	if config.Region != "eu-west-1" {
+		t.Errorf("Region = %q, want %q", config.Region, "eu-west-1")
+	}
+	if config.Logfile != "./output.log" {
+		t.Errorf("Logfile = %q, want %q", config.Logfile, "./output.log")
 	}
 }
 
-func TestNewConfig(t *testing.T) {
-	type args struct {
-		configpath string
+// TestConfig_WorkDirSubdirectories verifies the derived directory helpers all
+// resolve under WorkDir.
+func TestConfig_WorkDirSubdirectories(t *testing.T) {
+	// Scenario: a RAM disk work dir produces source/intermediate/output under it.
+	config := &Config{WorkDir: "/Volumes/image-processor-ramdisk/work"}
+
+	if got := config.GetSourceDir(); got != "/Volumes/image-processor-ramdisk/work/source" {
+		t.Errorf("GetSourceDir() = %q", got)
 	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *Config
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+	if got := config.GetIntermediateDir(); got != "/Volumes/image-processor-ramdisk/work/intermediate" {
+		t.Errorf("GetIntermediateDir() = %q", got)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewConfig(tt.args.configpath)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewConfig() = %v, want %v", got, tt.want)
-			}
-		})
+	if got := config.GetTargetDir(); got != "/Volumes/image-processor-ramdisk/work/output" {
+		t.Errorf("GetTargetDir() = %q", got)
+	}
+	if got := config.GetWorkDir(); got != "/Volumes/image-processor-ramdisk/work" {
+		t.Errorf("GetWorkDir() = %q", got)
 	}
 }
