@@ -100,16 +100,21 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 	return err
 }
 
-// ListFiles lists files in the source directory. A nil filter accepts every
-// object, matching the LocalFileService behavior.
+// ListFiles lists files in the requested source bucket (input.SourceRoot),
+// falling back to the service's configured source bucket. A nil filter
+// accepts every object, matching the LocalFileService behavior.
 func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) bool) ([]string, error) {
 	var files []string
 	if filter == nil {
 		filter = func(*string) bool { return true }
 	}
+	bucket := input.SourceRoot
+	if bucket == "" {
+		bucket = svc.SourceBucket
+	}
 	client := svc.client()
 	err := client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-		Bucket: aws.String(svc.BucketName),
+		Bucket: aws.String(bucket),
 	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		for _, obj := range page.Contents {
 			log.Printf("\nObject Key: %s", *obj.Key)

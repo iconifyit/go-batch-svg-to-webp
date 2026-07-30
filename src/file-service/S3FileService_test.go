@@ -328,16 +328,16 @@ func TestS3ListFiles(t *testing.T) {
 			}},
 		},
 	}
-	svc := &S3FileService{BucketName: "vectoricons-private", Client: mock}
+	svc := &S3FileService{SourceBucket: "vectoricons-private", Client: mock}
 
 	svgOnly := func(key *string) bool { return strings.HasSuffix(*key, ".svg") }
-	files, err := svc.ListFiles(ListFilesInput{}, svgOnly)
+	files, err := svc.ListFiles(ListFilesInput{SourceRoot: "vectoricons-private"}, svgOnly)
 	if err != nil {
 		t.Fatalf("ListFiles() error = %v", err)
 	}
 
 	if aws.StringValue(mock.listInput.Bucket) != "vectoricons-private" {
-		t.Errorf("list bucket = %q, want service bucket", aws.StringValue(mock.listInput.Bucket))
+		t.Errorf("list bucket = %q, want the requested source bucket", aws.StringValue(mock.listInput.Bucket))
 	}
 	want := []string{
 		"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg",
@@ -354,9 +354,11 @@ func TestS3ListFiles(t *testing.T) {
 }
 
 // TestS3ListFiles_NilFilter verifies a nil filter accepts every object,
-// matching the LocalFileService contract instead of panicking.
+// matching the LocalFileService contract instead of panicking, and that an
+// empty input falls back to the service's configured source bucket.
 func TestS3ListFiles_NilFilter(t *testing.T) {
-	// Scenario: a caller lists the bucket without any filtering.
+	// Scenario: a caller lists the bucket without any filtering and without
+	// naming a bucket in the input.
 	mock := &mockS3Client{
 		listPages: []*s3.ListObjectsV2Output{
 			{Contents: []*s3.Object{
@@ -365,7 +367,7 @@ func TestS3ListFiles_NilFilter(t *testing.T) {
 			}},
 		},
 	}
-	svc := &S3FileService{BucketName: "vectoricons-private", Client: mock}
+	svc := &S3FileService{SourceBucket: "vectoricons-private", Client: mock}
 
 	files, err := svc.ListFiles(ListFilesInput{}, nil)
 	if err != nil {
@@ -373,6 +375,9 @@ func TestS3ListFiles_NilFilter(t *testing.T) {
 	}
 	if len(files) != 2 {
 		t.Fatalf("ListFiles() with nil filter = %v, want all 2 objects", files)
+	}
+	if aws.StringValue(mock.listInput.Bucket) != "vectoricons-private" {
+		t.Errorf("list bucket = %q, want fallback to service source bucket", aws.StringValue(mock.listInput.Bucket))
 	}
 }
 
