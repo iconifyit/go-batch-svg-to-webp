@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
@@ -36,6 +37,22 @@ func (svc *S3FileService) client() s3iface.S3API {
 		return svc.Client
 	}
 	return s3.New(svc.Session)
+}
+
+// contentTypeForFile returns the MIME type for a file based on its
+// extension, falling back to application/octet-stream for unknown types.
+func contentTypeForFile(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	}
+	return "application/octet-stream"
 }
 
 func NewS3FileService(config *ServiceInput) IFileService {
@@ -78,14 +95,18 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 		Bucket:      aws.String(input.Bucket),
 		Key:         aws.String(input.TargetFilePath),
 		Body:        file,
-		ContentType: aws.String("image/" + filepath.Ext(input.SourceFilePath)),
+		ContentType: aws.String(contentTypeForFile(input.SourceFilePath)),
 	})
 	return err
 }
 
-// ListFiles lists files in the source directory
+// ListFiles lists files in the source directory. A nil filter accepts every
+// object, matching the LocalFileService behavior.
 func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) bool) ([]string, error) {
 	var files []string
+	if filter == nil {
+		filter = func(*string) bool { return true }
+	}
 	client := svc.client()
 	err := client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
 		Bucket: aws.String(svc.BucketName),
@@ -167,7 +188,7 @@ func (svc *S3FileService) Upload(localPath, objectKey string) error {
 		Bucket:      aws.String(svc.BucketName),
 		Key:         aws.String(objectKey),
 		Body:        fileBuffer,
-		ContentType: aws.String("image/" + filepath.Ext(localPath)),
+		ContentType: aws.String(contentTypeForFile(localPath)),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upload file to S3: %v", err)
