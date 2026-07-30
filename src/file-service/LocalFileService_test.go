@@ -9,8 +9,8 @@ import (
 )
 
 // seedSourceTree creates a realistic local source layout under a temp root:
-// two valid icon SVGs, one non-image file, and one hidden file. It returns
-// the root and the two valid relative keys.
+// two valid icon SVGs and one non-image file. It returns the root and the
+// two valid relative keys.
 func seedSourceTree(t *testing.T) (string, []string) {
 	t.Helper()
 	root := t.TempDir()
