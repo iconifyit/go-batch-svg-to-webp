@@ -116,6 +116,9 @@ func TestS3Transfer_DefaultsToServiceBucket(t *testing.T) {
 	if mock.putBodies[0] != "RIFFxxxxWEBPVP8 " {
 		t.Errorf("uploaded body = %q, want the file content", mock.putBodies[0])
 	}
+	if got := aws.StringValue(put.ContentType); got != "image/webp" {
+		t.Errorf("content type = %q, want image/webp", got)
+	}
 }
 
 // TestS3Transfer_ExplicitBucketWins verifies an explicit bucket overrides
@@ -178,6 +181,35 @@ func TestS3Upload(t *testing.T) {
 	}
 	if mock.putBodies[0] != "RIFFyyyyWEBPVP8 " {
 		t.Errorf("uploaded body = %q, want the file content", mock.putBodies[0])
+	}
+	if got := aws.StringValue(mock.putInputs[0].ContentType); got != "image/webp" {
+		t.Errorf("content type = %q, want image/webp", got)
+	}
+}
+
+// TestContentTypeForFile verifies the extension-to-MIME mapping, including
+// the unknown-extension fallback and case insensitivity.
+func TestContentTypeForFile(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		// Scenario: the formats this pipeline produces and consumes.
+		{"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-preview.webp", "image/webp"},
+		{"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg", "image/svg+xml"},
+		{"work/intermediate/coffee-cup-thumbnail.png", "image/png"},
+		{"uploads/photo.jpg", "image/jpeg"},
+		{"uploads/photo.jpeg", "image/jpeg"},
+		// Scenario: uppercase extension still maps.
+		{"uploads/COFFEE-CUP.WEBP", "image/webp"},
+		// Scenario: unknown extension falls back to a generic binary type.
+		{"iconify/manifest.json", "application/octet-stream"},
+		{"no-extension", "application/octet-stream"},
+	}
+	for _, tt := range tests {
+		if got := contentTypeForFile(tt.path); got != tt.want {
+			t.Errorf("contentTypeForFile(%q) = %q, want %q", tt.path, got, tt.want)
+		}
 	}
 }
 
@@ -318,6 +350,29 @@ func TestS3ListFiles(t *testing.T) {
 		if files[i] != want[i] {
 			t.Errorf("ListFiles()[%d] = %q, want %q", i, files[i], want[i])
 		}
+	}
+}
+
+// TestS3ListFiles_NilFilter verifies a nil filter accepts every object,
+// matching the LocalFileService contract instead of panicking.
+func TestS3ListFiles_NilFilter(t *testing.T) {
+	// Scenario: a caller lists the bucket without any filtering.
+	mock := &mockS3Client{
+		listPages: []*s3.ListObjectsV2Output{
+			{Contents: []*s3.Object{
+				{Key: aws.String("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg")},
+				{Key: aws.String("iconify/manifest.json")},
+			}},
+		},
+	}
+	svc := &S3FileService{BucketName: "vectoricons-private", Client: mock}
+
+	files, err := svc.ListFiles(ListFilesInput{}, nil)
+	if err != nil {
+		t.Fatalf("ListFiles() error = %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("ListFiles() with nil filter = %v, want all 2 objects", files)
 	}
 }
 
