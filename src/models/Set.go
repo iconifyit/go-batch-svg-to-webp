@@ -21,4 +21,5 @@ type Set struct {
 	UniqueID    string    `gorm:"column:unique_id;size:12" json:"unique_id"`
 	Description string    `gorm:"column:description" json:"description"`
 	IsDeleted   bool      `gorm:"column:is_deleted" json:"is_deleted"`
+	Images      []Image   `gorm:"polymorphic:Entity;polymorphicValue:set" json:"images"`
 }
