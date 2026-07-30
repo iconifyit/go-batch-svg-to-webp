@@ -59,6 +59,22 @@ func TestShouldInclude(t *testing.T) {
 			stringPtr("/Users/converter/source/iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"),
 			false,
 		},
+		// Scenario: local mode - a "./"-prefixed source root still matches,
+		// because filepath.Walk yields cleaned paths without the "./".
+		{
+			"local dot-slash source root",
+			Config{IsLocal: true, LocalSource: "./source", Include: []string{"iconify"}},
+			stringPtr("source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: local mode - a trailing slash on the source root does
+		// not break relative matching.
+		{
+			"local trailing-slash source root",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source/", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

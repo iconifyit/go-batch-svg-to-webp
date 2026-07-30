@@ -233,13 +233,23 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	}
 
 	// Strip the source root so prefixes like "iconify" match regardless of
-	// where the source tree lives on disk.
+	// where the source tree lives on disk. filepath.Rel is path-aware, so
+	// unclean roots (./source, trailing slashes) still resolve; paths that
+	// cannot be related to the root fall back to literal prefix trimming,
+	// which keeps S3 object keys (already root-relative) untouched.
 	sourceRoot := ip.Config.SourceBucket
 	if ip.Config.IsLocal {
 		sourceRoot = ip.Config.LocalSource
 	}
-	relPath := strings.TrimPrefix(*filePath, sourceRoot)
-	relPath = strings.TrimPrefix(relPath, "/")
+	relPath := *filePath
+	if sourceRoot != "" {
+		if rel, err := filepath.Rel(sourceRoot, *filePath); err == nil && !strings.HasPrefix(rel, "..") {
+			relPath = filepath.ToSlash(rel)
+		} else {
+			relPath = strings.TrimPrefix(relPath, sourceRoot)
+			relPath = strings.TrimPrefix(relPath, "/")
+		}
+	}
 
 	// Check for exclusion
 	for _, prefix := range exclude {
