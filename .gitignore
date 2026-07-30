@@ -40,3 +40,5 @@ test/output
 
 bak/*
 bak-*
+
+fixtures/*
