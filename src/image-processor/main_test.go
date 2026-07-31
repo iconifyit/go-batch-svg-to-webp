@@ -75,6 +75,14 @@ func TestShouldInclude(t *testing.T) {
 			stringPtr("/Users/converter/source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
 			true,
 		},
+		// Scenario: local mode - a directory whose name merely begins with
+		// ".." is still inside the root and must match include prefixes.
+		{
+			"local dot-dot-prefixed directory name",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"..icons"}},
+			stringPtr("/Users/converter/source/..icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

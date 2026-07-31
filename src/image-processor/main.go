@@ -243,7 +243,11 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	}
 	relPath := *filePath
 	if sourceRoot != "" {
-		if rel, err := filepath.Rel(sourceRoot, *filePath); err == nil && !strings.HasPrefix(rel, "..") {
+		// A path is outside the root only when Rel yields ".." itself or a
+		// "../" prefix; a plain ".." string prefix would also wrongly match
+		// names like "..icons".
+		if rel, err := filepath.Rel(sourceRoot, *filePath); err == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			relPath = filepath.ToSlash(rel)
 		} else {
 			relPath = strings.TrimPrefix(relPath, sourceRoot)

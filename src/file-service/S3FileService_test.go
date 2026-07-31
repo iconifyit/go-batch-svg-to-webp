@@ -163,6 +163,29 @@ func TestS3Transfer_MissingSource(t *testing.T) {
 	}
 }
 
+// TestS3UnconfiguredBucketFailsFast verifies Transfer, Upload, and Exists
+// return a clear configuration error instead of sending S3 requests with an
+// empty bucket name when neither BucketName nor TargetBucket is set.
+func TestS3UnconfiguredBucketFailsFast(t *testing.T) {
+	// Scenario: a service constructed without any bucket wiring.
+	mock := &mockS3Client{}
+	svc := &S3FileService{Client: mock}
+	src := seedLocalFile(t, "coffee-cup-preview.webp", "RIFFxxxxWEBP")
+
+	if err := svc.Transfer(TransferInput{SourceFilePath: src, TargetFilePath: "coffee-cup-preview.webp"}); err == nil {
+		t.Error("Transfer() without a bucket: expected error, got nil")
+	}
+	if err := svc.Upload(src, "coffee-cup-preview.webp"); err == nil {
+		t.Error("Upload() without a bucket: expected error, got nil")
+	}
+	if _, err := svc.Exists("coffee-cup-preview.webp"); err == nil {
+		t.Error("Exists() without a bucket: expected error, got nil")
+	}
+	if len(mock.putInputs) != 0 || mock.headInput != nil {
+		t.Error("S3 API was called despite missing bucket configuration")
+	}
+}
+
 // TestS3TargetBucket_ExplicitNameOverridesTarget verifies a manually set
 // BucketName takes precedence over the factory-wired TargetBucket.
 func TestS3TargetBucket_ExplicitNameOverridesTarget(t *testing.T) {

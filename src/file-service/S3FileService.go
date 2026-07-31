@@ -93,6 +93,9 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 	if input.Bucket == "" {
 		input.Bucket = svc.targetBucket()
 	}
+	if input.Bucket == "" {
+		return fmt.Errorf("no target bucket configured: set TransferInput.Bucket or the service TargetBucket")
+	}
 	log.Printf("svc.Session: %v", svc.Session)
 	client := svc.client()
 	file, err := os.Open(input.SourceFilePath)
@@ -179,6 +182,9 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 
 // Checks if an object exists in an s3 bucket.
 func (svc *S3FileService) Exists(objectKey string) (bool, error) {
+	if svc.targetBucket() == "" {
+		return false, fmt.Errorf("no target bucket configured: set BucketName or TargetBucket")
+	}
 	client := svc.client()
 	_, err := client.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(svc.targetBucket()),
@@ -192,6 +198,9 @@ func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 
 // Upload object to S3 bucket
 func (svc *S3FileService) Upload(localPath, objectKey string) error {
+	if svc.targetBucket() == "" {
+		return fmt.Errorf("no target bucket configured: set BucketName or TargetBucket")
+	}
 	client := svc.client()
 	fileBuffer, err := os.Open(localPath)
 	if err != nil {
