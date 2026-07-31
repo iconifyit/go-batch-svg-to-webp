@@ -249,9 +249,13 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 		if rel, err := filepath.Rel(sourceRoot, *filePath); err == nil &&
 			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			relPath = filepath.ToSlash(rel)
-		} else {
-			relPath = strings.TrimPrefix(relPath, sourceRoot)
-			relPath = strings.TrimPrefix(relPath, "/")
+		} else if strings.HasPrefix(relPath, sourceRoot+"/") {
+			// Literal fallback (S3 keys, unrelatable paths): only strip the
+			// root when the boundary is a separator, so a sibling like
+			// "/data/source-old" is not mangled by a "/data/source" root.
+			relPath = relPath[len(sourceRoot)+1:]
+		} else if strings.HasSuffix(sourceRoot, "/") && strings.HasPrefix(relPath, sourceRoot) {
+			relPath = relPath[len(sourceRoot):]
 		}
 	}
 

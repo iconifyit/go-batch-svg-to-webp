@@ -83,6 +83,16 @@ func TestShouldInclude(t *testing.T) {
 			stringPtr("/Users/converter/source/..icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
 			true,
 		},
+		// Scenario: a sibling directory sharing a string prefix with the
+		// root ("/data/source" vs "/data/source-old") is outside the root;
+		// its path must not be mangled into a bogus relative path that an
+		// include prefix could accidentally match.
+		{
+			"sibling directory sharing root prefix",
+			Config{IsLocal: true, LocalSource: "/data/source", Include: []string{"-old"}},
+			stringPtr("/data/source-old/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

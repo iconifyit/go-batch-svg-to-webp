@@ -11,6 +11,7 @@ import (
 	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -125,6 +126,9 @@ func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) b
 	if bucket == "" {
 		bucket = svc.SourceBucket
 	}
+	if bucket == "" {
+		return nil, fmt.Errorf("no source bucket configured: set ListFilesInput.SourceRoot or the service SourceBucket")
+	}
 	client := svc.client()
 	err := client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
@@ -180,7 +184,9 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 	return localPath, nil
 }
 
-// Checks if an object exists in an s3 bucket.
+// Checks if an object exists in an s3 bucket. A missing object returns
+// (false, nil); operational failures (access denied, throttling, network
+// errors) are returned as errors so they are not mistaken for absence.
 func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 	if svc.targetBucket() == "" {
 		return false, fmt.Errorf("no target bucket configured: set BucketName or TargetBucket")
@@ -191,7 +197,15 @@ func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		return false, nil
+		if aerr, ok := err.(awserr.Error); ok {
+			if aerr.Code() == "NotFound" || aerr.Code() == s3.ErrCodeNoSuchKey {
+				return false, nil
+			}
+			if reqErr, ok := aerr.(awserr.RequestFailure); ok && reqErr.StatusCode() == 404 {
+				return false, nil
+			}
+		}
+		return false, fmt.Errorf("failed to check object existence: %v", err)
 	}
 	return true, nil
 }

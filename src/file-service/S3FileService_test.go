@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 
@@ -339,9 +340,9 @@ func TestS3Download_GetError(t *testing.T) {
 	}
 }
 
-// TestS3Exists verifies the boolean contract: true when HeadObject succeeds,
-// false (without error) when it fails, checking the factory-wired target
-// bucket.
+// TestS3Exists verifies the contract: true for a present object, (false,
+// nil) only for a genuine not-found response, and an error for operational
+// failures so they are not mistaken for absence.
 func TestS3Exists(t *testing.T) {
 	// Scenario: check for an already-converted WebP before reprocessing.
 	objectKey := "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-preview.webp"
@@ -356,10 +357,30 @@ func TestS3Exists(t *testing.T) {
 		t.Errorf("HeadObject bucket = %q, want the factory-wired target bucket", got)
 	}
 
-	svc = &S3FileService{TargetBucket: "vectoricons-public", Client: &mockS3Client{headErr: errors.New("NotFound")}}
+	// Scenario: the object genuinely does not exist (S3 NotFound).
+	notFound := awserr.New("NotFound", "Not Found", nil)
+	svc = &S3FileService{TargetBucket: "vectoricons-public", Client: &mockS3Client{headErr: notFound}}
 	exists, err = svc.Exists(objectKey)
 	if err != nil || exists {
 		t.Errorf("Exists() = %v, %v for a missing object; want false, nil", exists, err)
+	}
+
+	// Scenario: an operational failure (access denied) must surface as an
+	// error, not report the object as absent.
+	denied := awserr.New("AccessDenied", "Access Denied", nil)
+	svc = &S3FileService{TargetBucket: "vectoricons-public", Client: &mockS3Client{headErr: denied}}
+	if _, err = svc.Exists(objectKey); err == nil {
+		t.Error("Exists() with AccessDenied: expected error, got nil")
+	}
+}
+
+// TestS3ListFiles_UnconfiguredBucketFailsFast verifies listing without any
+// bucket configuration returns a clear error instead of an invalid request.
+func TestS3ListFiles_UnconfiguredBucketFailsFast(t *testing.T) {
+	// Scenario: a service constructed without any bucket wiring.
+	svc := &S3FileService{Client: &mockS3Client{}}
+	if _, err := svc.ListFiles(ListFilesInput{}, nil); err == nil {
+		t.Error("ListFiles() without a bucket: expected error, got nil")
 	}
 }
 
