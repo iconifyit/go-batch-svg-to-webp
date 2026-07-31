@@ -19,6 +19,7 @@ func NewFileService(input ServiceInput) IFileService {
 		}
 	}
 	return &S3FileService{
+		Session:      input.Session,
 		SourceBucket: input.SourceRoot,
 		TargetBucket: input.TargetRoot,
 	}

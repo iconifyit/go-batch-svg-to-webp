@@ -102,20 +102,34 @@ func NewImageProcessor(contributor, configFile string) *ImageProcessor {
 
 	config.LocalTarget = filepath.Join(config.WorkDir, contributor, kUUID)
 
+	// Wire the file service with mode-appropriate roots: local paths for
+	// local runs, bucket names for S3 runs. The assumed-role session is
+	// passed through so the S3 implementation can build a real client.
+	sourceRoot := config.LocalSource
+	targetRoot := config.LocalTarget
+	if !config.IsLocal {
+		sourceRoot = config.SourceBucket
+		targetRoot = config.TargetBucket
+	}
+
 	imageProcessor.FileService = fileservice.NewFileService(fileservice.ServiceInput{
 		UUID:       kUUID,
 		IsLocal:    config.IsLocal,
-		SourceRoot: config.LocalSource,
-		TargetRoot: config.LocalTarget,
+		Session:    sess,
+		SourceRoot: sourceRoot,
+		TargetRoot: targetRoot,
 	})
 
-	// Test if the localSource folder exists:
-	exists, err := IsDir(config.LocalSource)
-	if err != nil {
-		log.Fatalf("Failed to check if local source directory exists: %v", err)
-	}
-	if !exists {
-		log.Fatalf("Local source directory does not exist: %s", config.LocalSource)
+	// Local mode requires the source directory to exist; S3 mode has no
+	// local source to check.
+	if config.IsLocal {
+		exists, err := IsDir(config.LocalSource)
+		if err != nil {
+			log.Fatalf("Failed to check if local source directory exists: %v", err)
+		}
+		if !exists {
+			log.Fatalf("Local source directory does not exist: %s", config.LocalSource)
+		}
 	}
 
 	return imageProcessor

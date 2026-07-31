@@ -32,12 +32,16 @@ type S3FileService struct {
 }
 
 // client returns the injected S3 API when set, otherwise a real client
-// built from the AWS session.
-func (svc *S3FileService) client() s3iface.S3API {
+// built from the AWS session. It fails fast when neither is available so a
+// missing session surfaces as a clear error instead of a nil dereference.
+func (svc *S3FileService) client() (s3iface.S3API, error) {
 	if svc.Client != nil {
-		return svc.Client
+		return svc.Client, nil
 	}
-	return s3.New(svc.Session)
+	if svc.Session == nil {
+		return nil, fmt.Errorf("no S3 client available: inject Client or provide an AWS Session")
+	}
+	return s3.New(svc.Session), nil
 }
 
 // targetBucket returns the explicitly set BucketName when present, falling
@@ -97,8 +101,10 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 	if input.Bucket == "" {
 		return fmt.Errorf("no target bucket configured: set TransferInput.Bucket or the service TargetBucket")
 	}
-	log.Printf("svc.Session: %v", svc.Session)
-	client := svc.client()
+	client, err := svc.client()
+	if err != nil {
+		return err
+	}
 	file, err := os.Open(input.SourceFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %v", err)
@@ -129,8 +135,11 @@ func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) b
 	if bucket == "" {
 		return nil, fmt.Errorf("no source bucket configured: set ListFilesInput.SourceRoot or the service SourceBucket")
 	}
-	client := svc.client()
-	err := client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+	client, err := svc.client()
+	if err != nil {
+		return nil, err
+	}
+	err = client.ListObjectsV2Pages(&s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
 	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		for _, obj := range page.Contents {
@@ -157,9 +166,17 @@ func (svc *S3FileService) ToImageFiles(files []string) ([]*imagefile.ImageFile, 
 	return imageFiles, nil
 }
 
-// Downloads a file from an s3 bucket.
+// Download copies an object from the source bucket to the local dest path,
+// creating parent directories as needed, and returns dest - matching the
+// LocalFileService.Download contract.
 func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
-	client := svc.client()
+	if svc.SourceBucket == "" {
+		return "", fmt.Errorf("no source bucket configured: set the service SourceBucket")
+	}
+	client, err := svc.client()
+	if err != nil {
+		return "", err
+	}
 	s3Object, err := client.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(svc.SourceBucket),
 		Key:    aws.String(file.ObjectKey),
@@ -169,9 +186,11 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 	}
 	defer s3Object.Body.Close()
 
-	localPath := fmt.Sprintf("%s/%s", svc.Config.LocalSource, file.ObjectKey)
+	if err := os.MkdirAll(filepath.Dir(dest), os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to create directory for local file: %v", err)
+	}
 
-	outFile, err := os.Create(localPath)
+	outFile, err := os.Create(dest)
 	if err != nil {
 		return "", fmt.Errorf("failed to create local file: %v", err)
 	}
@@ -181,7 +200,7 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 		return "", fmt.Errorf("failed to copy S3 file to local: %v", err)
 	}
 
-	return localPath, nil
+	return dest, nil
 }
 
 // Checks if an object exists in an s3 bucket. A missing object returns
@@ -191,8 +210,11 @@ func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 	if svc.targetBucket() == "" {
 		return false, fmt.Errorf("no target bucket configured: set BucketName or TargetBucket")
 	}
-	client := svc.client()
-	_, err := client.HeadObject(&s3.HeadObjectInput{
+	client, err := svc.client()
+	if err != nil {
+		return false, err
+	}
+	_, err = client.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(svc.targetBucket()),
 		Key:    aws.String(objectKey),
 	})
@@ -215,7 +237,10 @@ func (svc *S3FileService) Upload(localPath, objectKey string) error {
 	if svc.targetBucket() == "" {
 		return fmt.Errorf("no target bucket configured: set BucketName or TargetBucket")
 	}
-	client := svc.client()
+	client, err := svc.client()
+	if err != nil {
+		return err
+	}
 	fileBuffer, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %v", err)

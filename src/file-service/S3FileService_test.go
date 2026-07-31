@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 
@@ -164,6 +165,49 @@ func TestS3Transfer_MissingSource(t *testing.T) {
 	}
 }
 
+// TestS3NilSessionFailsFast verifies that a service with neither an
+// injected Client nor an AWS Session returns a clear error instead of a nil
+// dereference.
+func TestS3NilSessionFailsFast(t *testing.T) {
+	// Scenario: a service constructed with buckets but no session or client.
+	svc := &S3FileService{SourceBucket: "vectoricons-private", TargetBucket: "vectoricons-webp-staging"}
+	src := seedLocalFile(t, "coffee-cup-preview.webp", "RIFFxxxxWEBP")
+
+	if err := svc.Upload(src, "coffee-cup-preview.webp"); err == nil {
+		t.Error("Upload() without session or client: expected error, got nil")
+	}
+	if _, err := svc.ListFiles(ListFilesInput{SourceRoot: "vectoricons-private"}, nil); err == nil {
+		t.Error("ListFiles() without session or client: expected error, got nil")
+	}
+	if _, err := svc.Exists("coffee-cup-preview.webp"); err == nil {
+		t.Error("Exists() without session or client: expected error, got nil")
+	}
+}
+
+// TestNewFileService_S3PassesSession verifies the factory wires the AWS
+// session into the S3 implementation.
+func TestNewFileService_S3PassesSession(t *testing.T) {
+	// Scenario: S3-mode construction with a session, as NewImageProcessor
+	// wires it.
+	sess, err := session.NewSession()
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+	svc := NewFileService(ServiceInput{
+		IsLocal:    false,
+		Session:    sess,
+		SourceRoot: "vectoricons-private",
+		TargetRoot: "vectoricons-webp-staging",
+	})
+	s3svc, ok := svc.(*S3FileService)
+	if !ok {
+		t.Fatalf("NewFileService() = %T, want *S3FileService", svc)
+	}
+	if s3svc.Session != sess {
+		t.Error("factory did not pass the AWS session through to S3FileService")
+	}
+}
+
 // TestS3UnconfiguredBucketFailsFast verifies Transfer, Upload, and Exists
 // return a clear configuration error instead of sending S3 requests with an
 // empty bucket name when neither BucketName nor TargetBucket is set.
@@ -276,36 +320,31 @@ func TestS3Upload_PutError(t *testing.T) {
 }
 
 // TestS3Download verifies Download requests the right object and writes its
-// body under the configured local source root.
+// body to the dest path, creating parent directories - the same contract as
+// LocalFileService.Download.
 func TestS3Download(t *testing.T) {
-	// Scenario: download a source SVG from the private bucket to local disk.
+	// Scenario: download a source SVG from the private bucket into a nested
+	// work-dir path that does not exist yet.
 	objectKey := "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"
 	svgContent := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
-
-	localRoot := t.TempDir()
-	// Download writes to LocalSource/ObjectKey and does not create parent
-	// directories, so the fixture pre-creates them.
-	if err := os.MkdirAll(filepath.Join(localRoot, filepath.Dir(objectKey)), 0755); err != nil {
-		t.Fatalf("failed to create local dirs: %v", err)
-	}
 
 	mock := &mockS3Client{
 		getOutput: &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader(svgContent))},
 	}
-	svc := &S3FileService{
-		SourceBucket: "vectoricons-private",
-		Config:       FileServiceConfig{LocalSource: localRoot},
-		Client:       mock,
-	}
+	svc := &S3FileService{SourceBucket: "vectoricons-private", Client: mock}
 
 	img, err := imagefile.NewImageFile(objectKey)
 	if err != nil || img == nil {
 		t.Fatalf("fixture parse failed: %v", err)
 	}
 
-	localPath, err := svc.Download(img, "")
+	dest := filepath.Join(t.TempDir(), "work", "source", objectKey)
+	got, err := svc.Download(img, dest)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
+	}
+	if got != dest {
+		t.Errorf("Download() returned %q, want dest %q", got, dest)
 	}
 
 	if aws.StringValue(mock.getInput.Bucket) != "vectoricons-private" {
@@ -314,9 +353,9 @@ func TestS3Download(t *testing.T) {
 	if aws.StringValue(mock.getInput.Key) != objectKey {
 		t.Errorf("GetObject key = %q, want object key", aws.StringValue(mock.getInput.Key))
 	}
-	written, err := os.ReadFile(localPath)
+	written, err := os.ReadFile(dest)
 	if err != nil {
-		t.Fatalf("downloaded file missing: %v", err)
+		t.Fatalf("downloaded file missing at dest: %v", err)
 	}
 	if string(written) != svgContent {
 		t.Errorf("downloaded content differs from the S3 object body")
