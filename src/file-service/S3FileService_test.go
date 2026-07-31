@@ -88,11 +88,13 @@ func seedLocalFile(t *testing.T, name, content string) string {
 }
 
 // TestS3Transfer_DefaultsToServiceBucket verifies Transfer falls back to the
-// service bucket and uploads the file bytes under the target key.
+// factory-wired target bucket and uploads the file bytes under the target
+// key when the caller does not name a bucket.
 func TestS3Transfer_DefaultsToServiceBucket(t *testing.T) {
-	// Scenario: a finished WebP is transferred without naming a bucket.
+	// Scenario: a finished WebP is transferred without naming a bucket, on a
+	// service wired like NewFileService builds it (TargetBucket only).
 	mock := &mockS3Client{}
-	svc := &S3FileService{BucketName: "vectoricons-webp-staging", Client: mock}
+	svc := &S3FileService{TargetBucket: "vectoricons-webp-staging", Client: mock}
 	src := seedLocalFile(t, "coffee-cup-preview.webp", "RIFFxxxxWEBPVP8 ")
 
 	err := svc.Transfer(TransferInput{
@@ -108,7 +110,7 @@ func TestS3Transfer_DefaultsToServiceBucket(t *testing.T) {
 	}
 	put := mock.putInputs[0]
 	if aws.StringValue(put.Bucket) != "vectoricons-webp-staging" {
-		t.Errorf("bucket = %q, want service bucket", aws.StringValue(put.Bucket))
+		t.Errorf("bucket = %q, want the factory-wired target bucket", aws.StringValue(put.Bucket))
 	}
 	if aws.StringValue(put.Key) != "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-preview.webp" {
 		t.Errorf("key = %q, want target file path", aws.StringValue(put.Key))
@@ -126,7 +128,7 @@ func TestS3Transfer_DefaultsToServiceBucket(t *testing.T) {
 func TestS3Transfer_ExplicitBucketWins(t *testing.T) {
 	// Scenario: caller targets a specific bucket for one transfer.
 	mock := &mockS3Client{}
-	svc := &S3FileService{BucketName: "vectoricons-webp-staging", Client: mock}
+	svc := &S3FileService{TargetBucket: "vectoricons-webp-staging", Client: mock}
 	src := seedLocalFile(t, "robot-thumbnail.webp", "RIFFxxxxWEBP")
 
 	err := svc.Transfer(TransferInput{
@@ -161,12 +163,32 @@ func TestS3Transfer_MissingSource(t *testing.T) {
 	}
 }
 
-// TestS3Upload verifies Upload sends the file bytes to the service bucket
-// under the given key.
+// TestS3TargetBucket_ExplicitNameOverridesTarget verifies a manually set
+// BucketName takes precedence over the factory-wired TargetBucket.
+func TestS3TargetBucket_ExplicitNameOverridesTarget(t *testing.T) {
+	// Scenario: an operator overrides the bucket for a one-off upload.
+	mock := &mockS3Client{}
+	svc := &S3FileService{
+		BucketName:   "vectoricons-public",
+		TargetBucket: "vectoricons-webp-staging",
+		Client:       mock,
+	}
+	src := seedLocalFile(t, "coffee-cup-preview.webp", "RIFFxxxxWEBP")
+
+	if err := svc.Upload(src, "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-preview.webp"); err != nil {
+		t.Fatalf("Upload() error = %v", err)
+	}
+	if got := aws.StringValue(mock.putInputs[0].Bucket); got != "vectoricons-public" {
+		t.Errorf("bucket = %q, want explicit BucketName to win", got)
+	}
+}
+
+// TestS3Upload verifies Upload sends the file bytes to the factory-wired
+// target bucket under the given key.
 func TestS3Upload(t *testing.T) {
 	// Scenario: upload a watermarked WebP to the staging bucket.
 	mock := &mockS3Client{}
-	svc := &S3FileService{BucketName: "vectoricons-webp-staging", Client: mock}
+	svc := &S3FileService{TargetBucket: "vectoricons-webp-staging", Client: mock}
 	src := seedLocalFile(t, "coffee-cup-watermark.webp", "RIFFyyyyWEBPVP8 ")
 
 	if err := svc.Upload(src, "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-watermark.webp"); err != nil {
@@ -217,7 +239,7 @@ func TestContentTypeForFile(t *testing.T) {
 func TestS3Upload_PutError(t *testing.T) {
 	// Scenario: S3 rejects the upload (e.g. access denied).
 	mock := &mockS3Client{putErr: errors.New("AccessDenied")}
-	svc := &S3FileService{BucketName: "vectoricons-webp-staging", Client: mock}
+	svc := &S3FileService{TargetBucket: "vectoricons-webp-staging", Client: mock}
 	src := seedLocalFile(t, "robot-preview.webp", "RIFFzzzzWEBP")
 
 	err := svc.Upload(src, "iconify/icons/2C11DB2D5F79/B24091F3DF3E/robot-preview.webp")
@@ -295,18 +317,23 @@ func TestS3Download_GetError(t *testing.T) {
 }
 
 // TestS3Exists verifies the boolean contract: true when HeadObject succeeds,
-// false (without error) when it fails.
+// false (without error) when it fails, checking the factory-wired target
+// bucket.
 func TestS3Exists(t *testing.T) {
 	// Scenario: check for an already-converted WebP before reprocessing.
 	objectKey := "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-preview.webp"
 
-	svc := &S3FileService{BucketName: "vectoricons-public", Client: &mockS3Client{}}
+	mock := &mockS3Client{}
+	svc := &S3FileService{TargetBucket: "vectoricons-public", Client: mock}
 	exists, err := svc.Exists(objectKey)
 	if err != nil || !exists {
 		t.Errorf("Exists() = %v, %v for a present object; want true, nil", exists, err)
 	}
+	if got := aws.StringValue(mock.headInput.Bucket); got != "vectoricons-public" {
+		t.Errorf("HeadObject bucket = %q, want the factory-wired target bucket", got)
+	}
 
-	svc = &S3FileService{BucketName: "vectoricons-public", Client: &mockS3Client{headErr: errors.New("NotFound")}}
+	svc = &S3FileService{TargetBucket: "vectoricons-public", Client: &mockS3Client{headErr: errors.New("NotFound")}}
 	exists, err = svc.Exists(objectKey)
 	if err != nil || exists {
 		t.Errorf("Exists() = %v, %v for a missing object; want false, nil", exists, err)

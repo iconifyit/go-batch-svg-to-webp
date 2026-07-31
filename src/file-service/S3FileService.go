@@ -39,6 +39,16 @@ func (svc *S3FileService) client() s3iface.S3API {
 	return s3.New(svc.Session)
 }
 
+// targetBucket returns the explicitly set BucketName when present, falling
+// back to the TargetBucket wired by NewFileService. Write and existence
+// operations use this so factory-built services work without manual setup.
+func (svc *S3FileService) targetBucket() string {
+	if svc.BucketName != "" {
+		return svc.BucketName
+	}
+	return svc.TargetBucket
+}
+
 // contentTypeForFile returns the MIME type for a file based on its
 // extension, falling back to application/octet-stream for unknown types.
 func contentTypeForFile(path string) string {
@@ -81,7 +91,7 @@ func (svc *S3FileService) Transfer(input TransferInput) error {
 	// input.TargetFilePath is the s3 object key
 	// input.File - Not used in this implementation
 	if input.Bucket == "" {
-		input.Bucket = svc.BucketName
+		input.Bucket = svc.targetBucket()
 	}
 	log.Printf("svc.Session: %v", svc.Session)
 	client := svc.client()
@@ -171,7 +181,7 @@ func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (stri
 func (svc *S3FileService) Exists(objectKey string) (bool, error) {
 	client := svc.client()
 	_, err := client.HeadObject(&s3.HeadObjectInput{
-		Bucket: aws.String(svc.BucketName),
+		Bucket: aws.String(svc.targetBucket()),
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
@@ -190,7 +200,7 @@ func (svc *S3FileService) Upload(localPath, objectKey string) error {
 	defer fileBuffer.Close()
 
 	_, err = client.PutObject(&s3.PutObjectInput{
-		Bucket:      aws.String(svc.BucketName),
+		Bucket:      aws.String(svc.targetBucket()),
 		Key:         aws.String(objectKey),
 		Body:        fileBuffer,
 		ContentType: aws.String(contentTypeForFile(localPath)),
