@@ -52,7 +52,10 @@ func NewDatabaseService() (*DatabaseService, error) {
 		os.Getenv("POSTGRES_PORT"),
 	)
 
-	fmt.Println(dsn)
+	// Never log the DSN itself - it contains the database password. Log only
+	// the non-secret connection coordinates for troubleshooting.
+	log.Printf("Connecting to PostgreSQL host=%s dbname=%s port=%s",
+		os.Getenv("POSTGRES_HOST"), os.Getenv("POSTGRES_DB"), os.Getenv("POSTGRES_PORT"))
 
 	// Configure Gorm with logger
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
