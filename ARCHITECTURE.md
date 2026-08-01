@@ -14,7 +14,7 @@
 
 ## Introduction
 
-This high-performance CLI application is designed to batch-process hundreds of thousands of SVG images, converting them to optimized WebP format at multiple sizes. Built for [Vectopus.com](https://vectopus.com), it demonstrates enterprise-grade Go development with a focus on concurrency, modularity, and performance.
+This high-performance CLI application is designed to batch-process hundreds of thousands of SVG images, converting them to optimized WebP format at multiple sizes. Built for [VectorIcons.com](https://vectoricons.com), it demonstrates enterprise-grade Go development with a focus on concurrency, modularity, and performance.
 
 ### Key Highlights
 - **Performance**: 16x faster than single-threaded execution, processing 500K files in ~45 minutes
@@ -32,7 +32,7 @@ The application follows a **producer-consumer pattern** with **dual worker pools
 
 ```mermaid
 graph TB
-    START([CLI Entry Point<br/>--prefix --config]) --> CONFIG[Load YAML Config]
+    START([CLI Entry Point<br/>-f config.yml -c contributor]) --> CONFIG[Load YAML Config]
 
     CONFIG --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
     VALIDATE --> ROLE[Assume AWS IAM Role<br/>via STS]
@@ -210,7 +210,7 @@ YAML-based configuration with sensible defaults.
 ## Data Flow
 
 ### Phase 1: Initialization
-1. Parse CLI flags (`--prefix`, `--config`)
+1. Parse CLI flags (`-c/--contributor`, `-f/--file`)
 2. Load YAML configuration
 3. Validate contributor exists in database
 4. Assume AWS IAM role via STS
