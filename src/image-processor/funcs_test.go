@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
+
+	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
+	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 )
 
 // realisticSVG is a minimal but valid icon SVG used as a conversion fixture.
@@ -100,6 +103,60 @@ func TestRenameFolderWithTimestamp_MissingFolder(t *testing.T) {
 	ip := &ImageProcessor{Config: &Config{}}
 	if err := ip.RenameFolderWithTimestamp(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("RenameFolderWithTimestamp() with missing folder: expected error, got nil")
+	}
+}
+
+// TestDownloadFile verifies the downloaded file lands at
+// <work_dir>/<uuid>/source/<object_key> - the exact path ProcessFile reads
+// from - and that download errors propagate instead of being dropped.
+func TestDownloadFile(t *testing.T) {
+	// Scenario: local-mode download of a seeded source SVG into the work dir.
+	sourceRoot := t.TempDir()
+	workDir := t.TempDir()
+	objectKey := "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"
+
+	fullSource := filepath.Join(sourceRoot, objectKey)
+	if err := os.MkdirAll(filepath.Dir(fullSource), 0755); err != nil {
+		t.Fatalf("failed to create fixture dirs: %v", err)
+	}
+	if err := os.WriteFile(fullSource, []byte(realisticSVG), 0644); err != nil {
+		t.Fatalf("failed to seed source: %v", err)
+	}
+
+	img, err := imagefile.NewImageFile(objectKey)
+	if err != nil || img == nil {
+		t.Fatalf("fixture parse failed: %v", err)
+	}
+
+	ip := &ImageProcessor{
+		UUID:        "02b5e8da-a37b-4666-9892-44706466438e",
+		Config:      &Config{IsLocal: true, WorkDir: workDir, LocalSource: sourceRoot},
+		FileService: &fileservice.LocalFileService{SourceRoot: sourceRoot},
+	}
+
+	localPath, err := ip.downloadFile(img)
+	if err != nil {
+		t.Fatalf("downloadFile() error = %v", err)
+	}
+	want := filepath.Join(workDir, ip.UUID, "source", objectKey)
+	if localPath != want {
+		t.Errorf("downloadFile() = %q, want %q", localPath, want)
+	}
+	content, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("downloaded file missing at expected path: %v", err)
+	}
+	if string(content) != realisticSVG {
+		t.Errorf("downloaded content differs from source")
+	}
+
+	// Scenario: the source file is missing - the error must propagate.
+	missing, err := imagefile.NewImageFile("iconify/icons/2C11DB2D5F79/B24091F3DF3E/robot-2.svg")
+	if err != nil || missing == nil {
+		t.Fatalf("fixture parse failed: %v", err)
+	}
+	if _, err := ip.downloadFile(missing); err == nil {
+		t.Error("downloadFile() with missing source: expected error, got nil")
 	}
 }
 

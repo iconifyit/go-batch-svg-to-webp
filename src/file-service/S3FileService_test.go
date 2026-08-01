@@ -362,6 +362,16 @@ func TestS3Download(t *testing.T) {
 	}
 }
 
+// TestS3Download_NilFile verifies a nil file argument returns a clear error
+// instead of panicking on file.ObjectKey.
+func TestS3Download_NilFile(t *testing.T) {
+	// Scenario: a caller accidentally passes nil.
+	svc := &S3FileService{SourceBucket: "vectoricons-private", Client: &mockS3Client{}}
+	if _, err := svc.Download(nil, filepath.Join(t.TempDir(), "out.svg")); err == nil {
+		t.Fatal("Download(nil) : expected error, got nil")
+	}
+}
+
 // TestS3Download_EmptyDest verifies the error contract for a missing
 // destination path, instead of a confusing os.Create("") failure.
 func TestS3Download_EmptyDest(t *testing.T) {

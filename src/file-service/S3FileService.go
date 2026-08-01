@@ -171,6 +171,9 @@ func (svc *S3FileService) ToImageFiles(files []string) ([]*imagefile.ImageFile, 
 // creating parent directories as needed, and returns dest - matching the
 // LocalFileService.Download contract.
 func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
+	if file == nil {
+		return "", fmt.Errorf("no image file provided for download")
+	}
 	if dest == "" {
 		return "", fmt.Errorf("no destination path provided for download of %s", file.ObjectKey)
 	}

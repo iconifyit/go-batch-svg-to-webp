@@ -405,27 +405,16 @@ func (ip *ImageProcessor) downloadWorker(id int, errorChan chan<- error) {
 }
 
 func (ip *ImageProcessor) downloadFile(file *imagefile.ImageFile) (string, error) {
-	var relativePath string
+	// The destination mirrors the source-relative object key under this
+	// run's working directory: <work_dir>/<uuid>/source/<object_key>. The
+	// object key is already source-relative in both local and S3 modes.
+	localPath := filepath.Join(ip.Config.WorkDir, ip.UUID, "source", file.ObjectKey)
 
-	if ip.Config.IsLocal {
-		relativePath, _ = filepath.Rel(ip.Config.LocalSource, file.ObjectKey)
-	} else {
-		relativePath = file.ObjectKey
+	log.Printf("Downloading %s to %s", file.ObjectKey, localPath)
+
+	if _, err := ip.FileService.Download(file, localPath); err != nil {
+		return "", err
 	}
-
-	fmt.Printf("file : %s\n", file.ObjectKey)
-	fmt.Printf("relativePath : %s\n", relativePath)
-
-	// Construct the local path in the working directory
-	localPath := filepath.Join(ip.Config.WorkDir, ip.UUID, "source", relativePath)
-
-	// log.Printf("relativePath : %s", relativePath)
-	log.Printf("ip.Config.WorkDir : %s", ip.Config.WorkDir)
-	log.Printf("localPath : %s", localPath)
-	log.Printf("IP SourceDir : %s", ip.Config.LocalSource)
-	log.Printf("Downloading file : %s to %s", file.ObjectKey, filepath.Join(localPath, file.ObjectKey))
-
-	ip.FileService.Download(file, filepath.Join(localPath, file.ObjectKey))
 
 	return localPath, nil
 }

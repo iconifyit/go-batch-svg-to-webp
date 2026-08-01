@@ -108,6 +108,13 @@ func (svc *LocalFileService) ToImageFiles(files []string) ([]*imagefile.ImageFil
 // @Return string
 // @Return error
 func (svc *LocalFileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
+	if file == nil {
+		return "", fmt.Errorf("no image file provided for download")
+	}
+	if dest == "" {
+		return "", fmt.Errorf("no destination path provided for download of %s", file.ObjectKey)
+	}
+
 	// Construct the local path in the working directory
 	log.Printf("Downloading file : %s to %s", file.ObjectKey, dest)
 
