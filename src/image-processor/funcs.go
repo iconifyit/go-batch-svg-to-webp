@@ -432,11 +432,17 @@ func (ip *ImageProcessor) processWorker(id int, errorChan chan<- error) {
 }
 
 // Cleanup removes temporary directories and files
+// Cleanup removes this run's temporary source and intermediate directories
+// under <work_dir>/<uuid>/. The run's output directory is left in place -
+// it holds the results - and the shared work_dir root is never removed.
 func (ip *ImageProcessor) Cleanup() {
-	if ip.Config.AutoCleanup {
-		os.Remove(filepath.Join(ip.Config.WorkDir, "source", ip.UUID))
-		os.Remove(filepath.Join(ip.Config.WorkDir, "intermediate", ip.UUID))
-		time.Sleep(1 * time.Second)
-		os.RemoveAll(ip.Config.WorkDir)
+	if !ip.Config.AutoCleanup {
+		return
+	}
+	for _, dir := range []string{"source", "intermediate"} {
+		path := filepath.Join(ip.Config.WorkDir, ip.UUID, dir)
+		if err := os.RemoveAll(path); err != nil {
+			log.Printf("Cleanup: failed to remove %s: %v", path, err)
+		}
 	}
 }

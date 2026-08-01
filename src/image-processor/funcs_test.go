@@ -160,6 +160,51 @@ func TestDownloadFile(t *testing.T) {
 	}
 }
 
+// TestCleanup verifies AutoCleanup removes this run's source and
+// intermediate directories while preserving the output directory, and that
+// cleanup is a no-op when AutoCleanup is disabled.
+func TestCleanup(t *testing.T) {
+	// Scenario: a completed run with files in all three per-run directories.
+	seedRun := func(t *testing.T) (string, string) {
+		t.Helper()
+		workDir := t.TempDir()
+		runUUID := "02b5e8da-a37b-4666-9892-44706466438e"
+		for _, dir := range []string{"source", "intermediate", "output"} {
+			path := filepath.Join(workDir, runUUID, dir, "iconify", "icons")
+			if err := os.MkdirAll(path, 0755); err != nil {
+				t.Fatalf("failed to seed %s: %v", dir, err)
+			}
+			if err := os.WriteFile(filepath.Join(path, "coffee-cup.webp"), []byte("RIFFxxxxWEBP"), 0644); err != nil {
+				t.Fatalf("failed to seed file in %s: %v", dir, err)
+			}
+		}
+		return workDir, runUUID
+	}
+
+	workDir, runUUID := seedRun(t)
+	ip := &ImageProcessor{UUID: runUUID, Config: &Config{WorkDir: workDir, AutoCleanup: true}}
+	ip.Cleanup()
+
+	for _, dir := range []string{"source", "intermediate"} {
+		if _, err := os.Stat(filepath.Join(workDir, runUUID, dir)); !os.IsNotExist(err) {
+			t.Errorf("%s dir still exists after Cleanup with AutoCleanup enabled", dir)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(workDir, runUUID, "output", "iconify", "icons", "coffee-cup.webp")); err != nil {
+		t.Errorf("output was removed by Cleanup - results must be preserved: %v", err)
+	}
+
+	// Scenario: AutoCleanup disabled - nothing is removed.
+	workDir, runUUID = seedRun(t)
+	ip = &ImageProcessor{UUID: runUUID, Config: &Config{WorkDir: workDir, AutoCleanup: false}}
+	ip.Cleanup()
+	for _, dir := range []string{"source", "intermediate", "output"} {
+		if _, err := os.Stat(filepath.Join(workDir, runUUID, dir)); err != nil {
+			t.Errorf("%s dir missing after no-op Cleanup: %v", dir, err)
+		}
+	}
+}
+
 // TestConvertSVGToPNG is an integration test for the rsvg-convert pipeline
 // stage. Skips when rsvg-convert is not installed.
 func TestConvertSVGToPNG(t *testing.T) {
