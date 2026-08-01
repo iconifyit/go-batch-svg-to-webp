@@ -194,6 +194,7 @@ func TestNewFileService_S3PassesSession(t *testing.T) {
 		t.Fatalf("failed to create session: %v", err)
 	}
 	svc := NewFileService(ServiceInput{
+		UUID:       "02b5e8da-a37b-4666-9892-44706466438e",
 		IsLocal:    false,
 		Session:    sess,
 		SourceRoot: "vectoricons-private",
@@ -205,6 +206,9 @@ func TestNewFileService_S3PassesSession(t *testing.T) {
 	}
 	if s3svc.Session != sess {
 		t.Error("factory did not pass the AWS session through to S3FileService")
+	}
+	if s3svc.UUID != "02b5e8da-a37b-4666-9892-44706466438e" {
+		t.Error("factory did not pass the run UUID through to S3FileService")
 	}
 }
 

@@ -11,16 +11,12 @@ type IFileService interface {
 	Download(file *imagefile.ImageFile, dest string) (string, error)
 }
 
+// NewFileService selects the storage implementation for the run. It
+// delegates to the exported constructors so factory-built and directly
+// constructed services always share the same wiring.
 func NewFileService(input ServiceInput) IFileService {
 	if input.IsLocal {
-		return &LocalFileService{
-			SourceRoot: input.SourceRoot,
-			TargetRoot: input.TargetRoot,
-		}
+		return NewLocalFileService(&input)
 	}
-	return &S3FileService{
-		Session:      input.Session,
-		SourceBucket: input.SourceRoot,
-		TargetBucket: input.TargetRoot,
-	}
+	return NewS3FileService(&input)
 }
