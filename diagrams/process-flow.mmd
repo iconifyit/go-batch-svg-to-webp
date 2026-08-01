@@ -1,74 +1,61 @@
 graph TB
-    subgraph MAIN["Main Goroutine"]
-        START([CLI Entry Point<br/>-f config.yml -c contributor]) --> CONFIG[Load YAML Config]
-        CONFIG --> ROLE[Assume AWS IAM Role<br/>via STS]
-        ROLE --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
-        VALIDATE --> FILESERVICE{Initialize<br/>FileService}
+    START([CLI Entry Point<br/>-f config.yml -c contributor]) --> CONFIG[Load YAML Config]
 
-        FILESERVICE -->|IsLocal=true| LOCAL[LocalFileService]
-        FILESERVICE -->|IsLocal=false| S3FS[S3FileService]
+    CONFIG --> ROLE[Assume AWS IAM Role<br/>via STS]
+    ROLE --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
+    VALIDATE --> FILESERVICE{Initialize<br/>FileService}
 
-        LOCAL --> LISTFILES[List and Parse Files]
-        S3FS --> LISTFILES
+    FILESERVICE -->|IsLocal=true| LOCAL[LocalFileService]
+    FILESERVICE -->|IsLocal=false| S3FS[S3FileService]
 
-        LISTFILES --> IMAGEFILES[Create ImageFile Objects<br/>Parse Path Structure]
-        IMAGEFILES --> QUEUES[Initialize Buffered Channels<br/>Spawn Worker Pools]
+    LOCAL --> LISTFILES[List and Parse Files]
+    S3FS --> LISTFILES
 
-        CLEANUP[Cleanup Temp Files<br/>source, intermediate] --> DONE([Processing Complete<br/>Log Results])
-    end
+    LISTFILES --> IMAGEFILES[Create ImageFile Objects<br/>Parse Path Structure]
+    IMAGEFILES --> QUEUES[Initialize Buffered Channels]
 
     QUEUES --> DOWNLOADQ[Download Queue<br/>chan ImageFile]
     QUEUES --> PROCESSQ[Process Queue<br/>chan ImageFile]
 
-    subgraph DLPOOL["Download Worker Pool (goroutines)"]
-        DLW1[Download Worker 1] --> FETCH1[Fetch from Source]
-        DLW2[Download Worker 2] --> FETCH2[Fetch from Source]
-        DLW3[Download Worker 3] --> FETCH3[Fetch from Source]
-        DLWN[Download Worker N] --> FETCHN[Fetch from Source]
-    end
+    DOWNLOADQ --> DLW1[Download Worker 1]
+    DOWNLOADQ --> DLW2[Download Worker 2]
+    DOWNLOADQ --> DLW3[Download Worker 3]
+    DOWNLOADQ --> DLWN[Download Worker N]
 
-    DOWNLOADQ --> DLW1
-    DOWNLOADQ --> DLW2
-    DOWNLOADQ --> DLW3
-    DOWNLOADQ --> DLWN
+    DLW1 --> FETCH1[Fetch from Source]
+    DLW2 --> FETCH2[Fetch from Source]
+    DLW3 --> FETCH3[Fetch from Source]
+    DLWN --> FETCHN[Fetch from Source]
 
     FETCH1 --> PROCESSQ
     FETCH2 --> PROCESSQ
     FETCH3 --> PROCESSQ
     FETCHN --> PROCESSQ
 
-    subgraph PWPOOL["Process Worker Pool (goroutines)"]
-        PW1[Process Worker 1]
-        PW2[Process Worker 2]
-        PW3[Process Worker 3]
-        PWN[Process Worker N]
+    PROCESSQ --> PW1[Process Worker 1]
+    PROCESSQ --> PW2[Process Worker 2]
+    PROCESSQ --> PW3[Process Worker 3]
+    PROCESSQ --> PWN[Process Worker N]
 
-        subgraph PIPELINE["Per-file pipeline (runs inside each process worker)"]
-            SIZES[For Each Size<br/>thumbnail, preview, watermark] --> SVG2PNG[SVG to PNG<br/>rsvg-convert]
+    PW1 --> SIZES[For Each Size<br/>thumbnail, preview, watermark]
+    PW2 --> SIZES
+    PW3 --> SIZES
+    PWN --> SIZES
+    SIZES --> SVG2PNG[SVG to PNG<br/>rsvg-convert]
 
-            SVG2PNG --> CHECKWM{Watermark<br/>Size?}
-            CHECKWM -->|Yes| APPLYWM[Apply Watermark<br/>ffmpeg overlay filter]
-            CHECKWM -->|No| PNG2WEBP[PNG to WebP<br/>ffmpeg -q:v 75]
-            APPLYWM --> PNG2WEBP
+    SVG2PNG --> CHECKWM{Watermark<br/>Size?}
+    CHECKWM -->|Yes| APPLYWM[Apply Watermark<br/>ffmpeg overlay filter]
+    CHECKWM -->|No| PNG2WEBP[PNG to WebP<br/>ffmpeg -q:v 75]
+    APPLYWM --> PNG2WEBP
 
-            PNG2WEBP --> UPLOADCHECK{Upload<br/>to S3?}
-            UPLOADCHECK -->|Yes| S3UPLOAD[S3 PutObject<br/>Target Bucket]
-            UPLOADCHECK -->|No| LOCALSAVE[Keep in Run Output Dir<br/>run.sh collects results]
-        end
+    PNG2WEBP --> UPLOADCHECK{Upload<br/>to S3?}
+    UPLOADCHECK -->|Yes| S3UPLOAD[S3 PutObject<br/>Target Bucket]
+    UPLOADCHECK -->|No| LOCALSAVE[Keep in Run Output Dir<br/>run.sh collects results]
 
-        PW1 --> SIZES
-        PW2 --> SIZES
-        PW3 --> SIZES
-        PWN --> SIZES
-    end
-
-    PROCESSQ --> PW1
-    PROCESSQ --> PW2
-    PROCESSQ --> PW3
-    PROCESSQ --> PWN
-
-    S3UPLOAD --> CLEANUP
+    S3UPLOAD --> CLEANUP[Cleanup Temp Files<br/>source, intermediate]
     LOCALSAVE --> CLEANUP
+
+    CLEANUP --> DONE([Processing Complete<br/>Log Results])
 
     style START fill:#e1f5ff,stroke:#0066cc
     style FILESERVICE fill:#fff4e1,stroke:#cc9900
@@ -76,3 +63,7 @@ graph TB
     style PROCESSQ fill:#f0e1ff,stroke:#9933cc
     style SIZES fill:#e1ffe1,stroke:#009933
     style VALIDATE fill:#ffe1e1,stroke:#cc0000
+    classDef dlThread fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef pwThread fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+    class DLW1,DLW2,DLW3,DLWN,FETCH1,FETCH2,FETCH3,FETCHN dlThread
+    class PW1,PW2,PW3,PWN pwThread
