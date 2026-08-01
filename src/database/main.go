@@ -3,7 +3,9 @@ package database
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -41,16 +43,39 @@ func init() {
 	}
 }
 
+// buildDSN assembles the PostgreSQL connection URL from the POSTGRES_* env
+// vars. Values are whitespace-trimmed (stray spaces in .env files are
+// common and invalid in URLs) and credentials are URL-escaped so passwords
+// containing special characters (+, @, /, spaces) are transmitted
+// correctly.
+func buildDSN() string {
+	env := func(key string) string {
+		return strings.TrimSpace(os.Getenv(key))
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		url.QueryEscape(env("POSTGRES_USER")),
+		url.QueryEscape(env("POSTGRES_PASS")),
+		env("POSTGRES_HOST"),
+		env("POSTGRES_PORT"),
+		env("POSTGRES_DB"),
+	)
+}
+
+// redactCredentials removes the database password from an error message.
+// Driver parse errors echo the full DSN, so surfacing them verbatim would
+// leak credentials into logs.
+func redactCredentials(err error) string {
+	msg := err.Error()
+	if pass := strings.TrimSpace(os.Getenv("POSTGRES_PASS")); pass != "" {
+		msg = strings.ReplaceAll(msg, url.QueryEscape(pass), "[REDACTED]")
+		msg = strings.ReplaceAll(msg, pass, "[REDACTED]")
+	}
+	return msg
+}
+
 // NewDatabaseService initializes and returns a new DatabaseService instance
 func NewDatabaseService() (*DatabaseService, error) {
-	// Load environment variables (use godotenv if needed)
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		os.Getenv("POSTGRES_HOST"),
-		os.Getenv("POSTGRES_USER"),
-		os.Getenv("POSTGRES_PASS"),
-		os.Getenv("POSTGRES_DB"),
-		os.Getenv("POSTGRES_PORT"),
-	)
+	dsn := buildDSN()
 
 	// Never log the DSN itself - it contains the database password. Log only
 	// the non-secret connection coordinates for troubleshooting.
@@ -62,7 +87,7 @@ func NewDatabaseService() (*DatabaseService, error) {
 		Logger: logger.Default.LogMode(logger.Info), // Adjust log level as needed
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %v", err)
+		return nil, fmt.Errorf("failed to connect to the database: %s", redactCredentials(err))
 	}
 
 	// Configure connection pooling

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -36,6 +37,61 @@ func buildSQL(t *testing.T, filter func(tx *gorm.DB) *gorm.DB) string {
 		t.Fatal("ToSQL returned empty SQL")
 	}
 	return sql
+}
+
+// TestBuildDSN verifies the connection URL is assembled from the POSTGRES_*
+// env vars with credentials escaped, so passwords containing special
+// characters survive the round trip.
+func TestBuildDSN(t *testing.T) {
+	// Scenario: a dev database with a password containing '+' and '@'.
+	t.Setenv("POSTGRES_HOST", "db-dev.example.net")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "vectopus")
+	t.Setenv("POSTGRES_PASS", "s3cr3t+pa@ss")
+	t.Setenv("POSTGRES_DB", "postgres")
+
+	got := buildDSN()
+	want := "postgres://vectopus:s3cr3t%2Bpa%40ss@db-dev.example.net:5432/postgres?sslmode=disable"
+	if got != want {
+		t.Errorf("buildDSN() = %q, want %q", got, want)
+	}
+}
+
+// TestBuildDSN_TrimsWhitespace verifies stray whitespace in env values -
+// common in hand-edited .env files and fatal in URLs - is stripped.
+func TestBuildDSN_TrimsWhitespace(t *testing.T) {
+	// Scenario: the host value carries a trailing space from the .env file.
+	t.Setenv("POSTGRES_HOST", "db-dev.example.net ")
+	t.Setenv("POSTGRES_PORT", " 5432")
+	t.Setenv("POSTGRES_USER", "vectopus")
+	t.Setenv("POSTGRES_PASS", "s3cr3t")
+	t.Setenv("POSTGRES_DB", "postgres")
+
+	got := buildDSN()
+	want := "postgres://vectopus:s3cr3t@db-dev.example.net:5432/postgres?sslmode=disable"
+	if got != want {
+		t.Errorf("buildDSN() = %q, want %q", got, want)
+	}
+}
+
+// TestNewDatabaseService_RedactsCredentialsInErrors verifies a connection
+// error never carries the password, since driver parse errors echo the
+// full DSN.
+func TestNewDatabaseService_RedactsCredentialsInErrors(t *testing.T) {
+	// Scenario: an unparseable host forces a driver-level DSN error.
+	t.Setenv("POSTGRES_HOST", "bad host.example.net")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "vectopus")
+	t.Setenv("POSTGRES_PASS", "s3cr3t+topsecret")
+	t.Setenv("POSTGRES_DB", "postgres")
+
+	_, err := NewDatabaseService()
+	if err == nil {
+		t.Fatal("NewDatabaseService() with invalid host: expected error, got nil")
+	}
+	if strings.Contains(err.Error(), "topsecret") || strings.Contains(err.Error(), url.QueryEscape("s3cr3t+topsecret")) {
+		t.Errorf("connection error leaks the password: %q", err.Error())
+	}
 }
 
 // TestWhere verifies the equality filter produces a WHERE column = value
