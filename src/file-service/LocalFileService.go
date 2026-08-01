@@ -114,6 +114,9 @@ func (svc *LocalFileService) Download(file *imagefile.ImageFile, dest string) (s
 	if dest == "" {
 		return "", fmt.Errorf("no destination path provided for download of %s", file.ObjectKey)
 	}
+	if svc.SourceRoot == "" {
+		return "", fmt.Errorf("no source root configured: set the service SourceRoot")
+	}
 
 	// Construct the local path in the working directory
 	log.Printf("Downloading file : %s to %s", file.ObjectKey, dest)

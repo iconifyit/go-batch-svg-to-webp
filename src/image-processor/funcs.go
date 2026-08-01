@@ -408,7 +408,16 @@ func (ip *ImageProcessor) downloadFile(file *imagefile.ImageFile) (string, error
 	// The destination mirrors the source-relative object key under this
 	// run's working directory: <work_dir>/<uuid>/source/<object_key>. The
 	// object key is already source-relative in both local and S3 modes.
-	localPath := filepath.Join(ip.Config.WorkDir, ip.UUID, "source", file.ObjectKey)
+	sourceDir := filepath.Join(ip.Config.WorkDir, ip.UUID, "source")
+	localPath := filepath.Join(sourceDir, file.ObjectKey)
+
+	// Object keys are untrusted input: reject any key whose resolved
+	// destination escapes the run's source directory (e.g. ".." segments),
+	// so a crafted key cannot overwrite arbitrary local files.
+	rel, err := filepath.Rel(sourceDir, localPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("object key %q resolves outside the work directory", file.ObjectKey)
+	}
 
 	log.Printf("Downloading %s to %s", file.ObjectKey, localPath)
 

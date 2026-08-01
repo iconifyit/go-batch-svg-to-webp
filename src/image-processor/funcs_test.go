@@ -160,6 +160,25 @@ func TestDownloadFile(t *testing.T) {
 	}
 }
 
+// TestDownloadFile_RejectsTraversal verifies an object key with parent
+// traversal segments is rejected before any file is written, so a crafted
+// key cannot escape the run's work directory.
+func TestDownloadFile_RejectsTraversal(t *testing.T) {
+	// Scenario: an untrusted key attempts to climb out of the source dir.
+	ip := &ImageProcessor{
+		UUID:        "02b5e8da-a37b-4666-9892-44706466438e",
+		Config:      &Config{IsLocal: true, WorkDir: t.TempDir(), LocalSource: t.TempDir()},
+		FileService: &fileservice.LocalFileService{SourceRoot: t.TempDir()},
+	}
+	evil := &imagefile.ImageFile{
+		ObjectKey: "../../icons/2C11DB2D5F79/B24091F3DF3E/evil.svg",
+		IsValid:   true,
+	}
+	if _, err := ip.downloadFile(evil); err == nil {
+		t.Fatal("downloadFile() with traversal key: expected error, got nil")
+	}
+}
+
 // TestCleanup verifies AutoCleanup removes this run's source and
 // intermediate directories while preserving the output directory, and that
 // cleanup is a no-op when AutoCleanup is disabled.

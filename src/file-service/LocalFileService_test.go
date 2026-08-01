@@ -205,6 +205,23 @@ func TestLocalFileService_Download(t *testing.T) {
 	}
 }
 
+// TestLocalFileService_Download_UnconfiguredSourceRoot verifies the error
+// contract when the service has no source root wired, instead of silently
+// reading relative to the process working directory.
+func TestLocalFileService_Download_UnconfiguredSourceRoot(t *testing.T) {
+	// Scenario: a service constructed without SourceRoot.
+	img, err := (&LocalFileService{}).ToImageFiles([]string{
+		"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg",
+	})
+	if err != nil || len(img) != 1 {
+		t.Fatalf("fixture parse failed: %v", err)
+	}
+	svc := &LocalFileService{}
+	if _, err := svc.Download(img[0], filepath.Join(t.TempDir(), "out.svg")); err == nil {
+		t.Fatal("Download() without SourceRoot: expected error, got nil")
+	}
+}
+
 // TestLocalFileService_Download_MissingSource verifies the error contract
 // when the ObjectKey does not exist under SourceRoot.
 func TestLocalFileService_Download_MissingSource(t *testing.T) {
