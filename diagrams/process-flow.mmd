@@ -1,0 +1,40 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'system-ui, sans-serif','primaryColor':'#e3cff3','primaryBorderColor':'#730FC3','primaryTextColor':'#293845','lineColor':'#788896','clusterBkg':'#ffffff','clusterBorder':'#788896','edgeLabelBackground':'#ffffff'}}}%%
+flowchart TB
+  subgraph Startup
+    cli([image-processor -f config.yml -c contributor]):::house --> cfg[Load YAML config, apply defaults]:::house
+    cfg --> role[Assume IAM role via STS]:::house
+    role --> val{Contributor exists in PostgreSQL?}:::house
+    val -->|yes| wire[Wire FileService: local FS or S3]:::house
+    val -. no .-> abort([Fatal exit]):::house
+  end
+
+  subgraph Discovery
+    wire --> list["List source files, apply include/exclude prefixes"]:::house
+    list --> parse[Parse paths into ImageFile metadata]:::house
+  end
+
+  subgraph Workers["Concurrent worker pools"]
+    parse --> dq[[DownloadQueue]]:::house
+    dq --> dl["Download workers: copy SVG to work dir (local cp / S3 GetObject)"]:::house
+    dl --> pq[[ProcessQueue]]:::house
+    pq --> pw[Process workers]:::house
+    dl -. error: fail fast .-> abort
+    pw -. error: fail fast .-> abort
+  end
+
+  subgraph PerSize["Per size variant: thumbnail 128 / preview 512 / watermark 512"]
+    pw --> svg2png[rsvg-convert: SVG to PNG at size]:::house
+    svg2png --> wm{Watermark variant?}:::house
+    wm -->|yes| overlay[ffmpeg: watermark overlay]:::house
+    overlay --> webp[ffmpeg: PNG to WebP]:::house
+    wm -->|no| webp
+    webp --> mode{S3 mode?}:::house
+    mode -->|yes| s3[(Target S3 bucket)]:::house
+    mode -->|no| outdir[("Run output dir (run.sh collects results)")]:::house
+  end
+
+  s3 --> cleanup["Cleanup run temp dirs (auto_cleanup)"]:::house
+  outdir --> cleanup
+  cleanup --> done([Done]):::house
+
+  classDef house fill:#e3cff3,stroke:#730FC3,stroke-width:2px,color:#293845;
