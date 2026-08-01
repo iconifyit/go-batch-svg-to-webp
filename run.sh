@@ -34,13 +34,24 @@ fi
 # Resolve the actual mount point of the device we just created. If a stale
 # volume with the same name is already mounted, macOS mounts the new one at
 # "/Volumes/<name> 1" (2, 3, ...), so the hardcoded path would point at the
-# wrong disk - and cleanup would eject the wrong volume.
-RAMDISK_PATH=$(diskutil info "$RAMDISK_DEV" | awk -F': *' '/Mount Point/ {print $2}')
-if [ -z "$RAMDISK_PATH" ]; then
-  echo "Failed to resolve RAM disk mount point."
-  hdiutil detach "$RAMDISK_DEV"
-  exit 1
-fi
+# wrong disk - and cleanup would eject the wrong volume. diskutil reports
+# "Not mounted" (a non-empty string) while the volume is still mounting, so
+# retry briefly and treat that value as a failure.
+RAMDISK_PATH=""
+for _ in 1 2 3 4 5; do
+  RAMDISK_PATH=$(diskutil info "$RAMDISK_DEV" | awk -F': *' '/Mount Point/ {print $2}')
+  case "$RAMDISK_PATH" in
+    ""|"Not mounted"*) sleep 1 ;;
+    *) break ;;
+  esac
+done
+case "$RAMDISK_PATH" in
+  ""|"Not mounted"*)
+    echo "Failed to resolve RAM disk mount point."
+    hdiutil detach "$RAMDISK_DEV"
+    exit 1
+    ;;
+esac
 echo "RAM disk is mounted at: $RAMDISK_PATH"
 
 # Update config.yml for RAM disk paths
