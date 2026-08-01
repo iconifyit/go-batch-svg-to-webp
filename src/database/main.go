@@ -45,30 +45,36 @@ func init() {
 
 // buildDSN assembles the PostgreSQL connection URL from the POSTGRES_* env
 // vars. Values are whitespace-trimmed (stray spaces in .env files are
-// common and invalid in URLs) and credentials are URL-escaped so passwords
-// containing special characters (+, @, /, spaces) are transmitted
-// correctly.
+// common and invalid in URLs) and credentials use userinfo escaping via
+// url.UserPassword, so passwords containing special characters (+, @, /,
+// spaces) are transmitted correctly.
 func buildDSN() string {
 	env := func(key string) string {
 		return strings.TrimSpace(os.Getenv(key))
 	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		url.QueryEscape(env("POSTGRES_USER")),
-		url.QueryEscape(env("POSTGRES_PASS")),
-		env("POSTGRES_HOST"),
-		env("POSTGRES_PORT"),
-		env("POSTGRES_DB"),
-	)
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(env("POSTGRES_USER"), env("POSTGRES_PASS")),
+		Host:     env("POSTGRES_HOST") + ":" + env("POSTGRES_PORT"),
+		Path:     env("POSTGRES_DB"),
+		RawQuery: "sslmode=disable",
+	}
+	return dsn.String()
 }
 
 // redactCredentials removes the database password from an error message.
 // Driver parse errors echo the full DSN, so surfacing them verbatim would
-// leak credentials into logs.
+// leak credentials into logs. Both the raw and userinfo-escaped forms are
+// replaced.
 func redactCredentials(err error) string {
 	msg := err.Error()
-	if pass := strings.TrimSpace(os.Getenv("POSTGRES_PASS")); pass != "" {
-		msg = strings.ReplaceAll(msg, url.QueryEscape(pass), "[REDACTED]")
-		msg = strings.ReplaceAll(msg, pass, "[REDACTED]")
+	pass := strings.TrimSpace(os.Getenv("POSTGRES_PASS"))
+	if pass == "" {
+		return msg
+	}
+	escaped := strings.TrimPrefix(url.UserPassword("u", pass).String(), "u:")
+	for _, needle := range []string{escaped, pass} {
+		msg = strings.ReplaceAll(msg, needle, "[REDACTED]")
 	}
 	return msg
 }

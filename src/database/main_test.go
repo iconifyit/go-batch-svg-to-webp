@@ -51,7 +51,25 @@ func TestBuildDSN(t *testing.T) {
 	t.Setenv("POSTGRES_DB", "postgres")
 
 	got := buildDSN()
-	want := "postgres://vectopus:s3cr3t%2Bpa%40ss@db-dev.example.net:5432/postgres?sslmode=disable"
+	want := "postgres://vectopus:s3cr3t+pa%40ss@db-dev.example.net:5432/postgres?sslmode=disable"
+	if got != want {
+		t.Errorf("buildDSN() = %q, want %q", got, want)
+	}
+}
+
+// TestBuildDSN_SpaceInPassword verifies a password containing a space is
+// percent-encoded (%20), not query-encoded as '+', which userinfo parsing
+// would treat as a literal plus.
+func TestBuildDSN_SpaceInPassword(t *testing.T) {
+	// Scenario: an operator password with an embedded space.
+	t.Setenv("POSTGRES_HOST", "db-dev.example.net")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "vectopus")
+	t.Setenv("POSTGRES_PASS", "my secret pass")
+	t.Setenv("POSTGRES_DB", "postgres")
+
+	got := buildDSN()
+	want := "postgres://vectopus:my%20secret%20pass@db-dev.example.net:5432/postgres?sslmode=disable"
 	if got != want {
 		t.Errorf("buildDSN() = %q, want %q", got, want)
 	}

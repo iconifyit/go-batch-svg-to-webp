@@ -3,7 +3,6 @@ package imageprocessor
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
@@ -33,22 +32,6 @@ type Config struct {
 	WorkerPoolSize          int            `yaml:"worker_pool_size"`
 	DownloadWorkerPoolSize  int            `yaml:"download_worker_pool_size"`
 	ProcessWorkerPoolSize   int            `yaml:"process_worker_pool_size"`
-}
-
-func (config *Config) GetSourceDir() string {
-	return filepath.Join(config.WorkDir, "source")
-}
-
-func (config *Config) GetIntermediateDir() string {
-	return filepath.Join(config.WorkDir, "intermediate")
-}
-
-func (config *Config) GetTargetDir() string {
-	return filepath.Join(config.WorkDir, "output")
-}
-
-func (config *Config) GetWorkDir() string {
-	return config.WorkDir
 }
 
 func (config *Config) SetDefaults() {

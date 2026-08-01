@@ -156,23 +156,3 @@ func TestSetDefaults_PreservesExplicitValues(t *testing.T) {
 		t.Errorf("Logfile = %q, want %q", config.Logfile, "./output.log")
 	}
 }
-
-// TestConfig_WorkDirSubdirectories verifies the derived directory helpers all
-// resolve under WorkDir.
-func TestConfig_WorkDirSubdirectories(t *testing.T) {
-	// Scenario: a RAM disk work dir produces source/intermediate/output under it.
-	config := &Config{WorkDir: "/Volumes/image-processor-ramdisk/work"}
-
-	if got := config.GetSourceDir(); got != "/Volumes/image-processor-ramdisk/work/source" {
-		t.Errorf("GetSourceDir() = %q", got)
-	}
-	if got := config.GetIntermediateDir(); got != "/Volumes/image-processor-ramdisk/work/intermediate" {
-		t.Errorf("GetIntermediateDir() = %q", got)
-	}
-	if got := config.GetTargetDir(); got != "/Volumes/image-processor-ramdisk/work/output" {
-		t.Errorf("GetTargetDir() = %q", got)
-	}
-	if got := config.GetWorkDir(); got != "/Volumes/image-processor-ramdisk/work" {
-		t.Errorf("GetWorkDir() = %q", got)
-	}
-}
