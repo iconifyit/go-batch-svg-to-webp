@@ -1,6 +1,6 @@
 ```mermaid
 graph TB
-    START([CLI Entry Point<br/>--prefix --config]) --> CONFIG[Load YAML Config]
+    START([CLI Entry Point<br/>-f config.yml -c contributor]) --> CONFIG[Load YAML Config]
 
     CONFIG --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
     VALIDATE --> ROLE[Assume AWS IAM Role<br/>via STS]
