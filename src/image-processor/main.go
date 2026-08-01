@@ -304,10 +304,32 @@ func (ip *ImageProcessor) ListFiles() ([]string, error) {
 	} else {
 		sourceRoot = ip.Config.SourceBucket
 	}
-	return ip.FileService.ListFiles(
+	// S3 listing applies the filter per key, which is cheap. Local listing
+	// runs per-file image parsing inside the service when given a filter,
+	// so walk with a nil filter instead and apply the include/exclude
+	// rules here - ImageFiles() performs the actual parse exactly once.
+	if !ip.Config.IsLocal {
+		return ip.FileService.ListFiles(
+			fileservice.ListFilesInput{SourceRoot: sourceRoot},
+			ip.ShouldInclude,
+		)
+	}
+
+	files, err := ip.FileService.ListFiles(
 		fileservice.ListFilesInput{SourceRoot: sourceRoot},
-		ip.ShouldInclude,
+		nil,
 	)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []string
+	for _, file := range files {
+		path := file
+		if ip.ShouldInclude(&path) {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered, nil
 }
 
 // ListDirs lists directories in a given folder, 1-level deep

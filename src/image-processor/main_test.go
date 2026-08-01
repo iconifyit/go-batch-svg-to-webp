@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
 )
 
 // stringPtr is a test helper for building *string file paths.
@@ -102,6 +104,44 @@ func TestShouldInclude(t *testing.T) {
 				t.Errorf("ShouldInclude() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestListFiles_LocalAppliesIncludeFilter verifies local-mode listing walks
+// the source tree once and applies include/exclude rules in the processor,
+// returning only the matching contributor's files.
+func TestListFiles_LocalAppliesIncludeFilter(t *testing.T) {
+	// Scenario: two contributors on disk, include list keeps only iconify.
+	root := t.TempDir()
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
+	keys := []string{
+		"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg",
+		"vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg",
+	}
+	for _, key := range keys {
+		full := filepath.Join(root, key)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatalf("failed to seed dirs: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(svg), 0644); err != nil {
+			t.Fatalf("failed to seed %s: %v", key, err)
+		}
+	}
+
+	ip := &ImageProcessor{
+		Config:      &Config{IsLocal: true, LocalSource: root, Include: []string{"iconify"}},
+		FileService: &fileservice.LocalFileService{SourceRoot: root},
+	}
+
+	files, err := ip.ListFiles()
+	if err != nil {
+		t.Fatalf("ListFiles() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("ListFiles() = %v, want only the iconify file", files)
+	}
+	if files[0] != filepath.Join(root, keys[0]) {
+		t.Errorf("ListFiles()[0] = %q, want %q", files[0], filepath.Join(root, keys[0]))
 	}
 }
 
