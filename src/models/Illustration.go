@@ -21,4 +21,5 @@ type Illustration struct {
 	UniqueID  string    `gorm:"column:unique_id;size:12" json:"unique_id"`
 	ColorData string    `gorm:"column:color_data" json:"color_data"`
 	IsDeleted bool      `gorm:"column:is_deleted" json:"is_deleted"`
+	Images    []Image   `gorm:"polymorphic:Entity;polymorphicValue:illustration" json:"images"`
 }

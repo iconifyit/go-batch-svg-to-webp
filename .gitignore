@@ -42,3 +42,10 @@ bak/*
 bak-*
 
 fixtures/*
+
+# Local runtime config (machine-specific, mutated by run.sh)
+config.yml
+config_run.yml
+
+# Built binary (root only - do not match src/image-processor)
+/image-processor

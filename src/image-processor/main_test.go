@@ -1,564 +1,287 @@
 package imageprocessor
 
 import (
-	"reflect"
-	"sync"
+	"log"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/session"
 	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
-	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 )
 
-func TestIsDir(t *testing.T) {
-	type args struct {
-		path string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    bool
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := IsDir(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("IsDir() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("IsDir() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+// stringPtr is a test helper for building *string file paths.
+func stringPtr(s string) *string {
+	return &s
 }
 
-func TestIsFile(t *testing.T) {
-	type args struct {
-		path string
-	}
+// TestShouldInclude verifies the include/exclude prefix filtering contract.
+// Prefixes match against the source-root-relative path, so the same config
+// works for S3 object keys and absolute local paths alike.
+func TestShouldInclude(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    args
-		want    bool
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := IsFile(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("IsFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("IsFile() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestNewImageProcessor(t *testing.T) {
-	type args struct {
-		contributor string
-		configFile  string
-	}
-	tests := []struct {
-		name string
-		args args
-		want *ImageProcessor
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := NewImageProcessor(tt.args.contributor, tt.args.configFile); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewImageProcessor() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSessionWithRole(t *testing.T) {
-	type args struct {
-		roleArn string
-		region  string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *session.Session
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := SessionWithRole(tt.args.roleArn, tt.args.region)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SessionWithRole() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("SessionWithRole() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestLoadConfig(t *testing.T) {
-	type args struct {
-		path string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *Config
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := LoadConfig(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LoadConfig() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_IsLocalRun(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if got := ip.IsLocalRun(); got != tt.want {
-				t.Errorf("ImageProcessor.IsLocalRun() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_SetupLogging(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.SetupLogging(); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.SetupLogging() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestImageProcessor_ShouldInclude(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
+		name     string
+		config   Config
 		filePath *string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   bool
+		want     bool
 	}{
-		// TODO: Add test cases.
+		// Scenario: nil path can never be included.
+		{"nil path", Config{}, nil, false},
+		// Scenario: hidden files are always excluded.
+		{"hidden file", Config{}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/.DS_Store"), false},
+		// Scenario: no include/exclude rules includes every visible file.
+		{"no rules includes all", Config{}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
+		// Scenario: file under an excluded prefix is dropped.
+		{"excluded prefix", Config{Exclude: []string{"iconify/illustrations"}}, stringPtr("iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"), false},
+		// Scenario: file matching an include prefix is kept.
+		{"include match", Config{Include: []string{"iconify/icons"}}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), true},
+		// Scenario: file outside all include prefixes is dropped.
+		{"include miss", Config{Include: []string{"iconify/icons"}}, stringPtr("vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg"), false},
+		// Scenario: exclusion wins over inclusion for the same file.
+		{"exclude beats include", Config{Include: []string{"iconify"}, Exclude: []string{"iconify/icons"}}, stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"), false},
+		// Scenario: local mode - absolute walk path matches a contributor
+		// prefix because the configured source root is stripped first.
+		{
+			"local absolute path include match",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: local mode - absolute path for a different contributor
+		// is dropped by the include list.
+		{
+			"local absolute path include miss",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg"),
+			false,
+		},
+		// Scenario: local mode - exclusion applies to the relative path.
+		{
+			"local absolute path excluded",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Exclude: []string{"iconify/illustrations"}},
+			stringPtr("/Users/converter/source/iconify/illustrations/58DC40590C5D/FFD4DC6639ED/mountain.svg"),
+			false,
+		},
+		// Scenario: local mode - a "./"-prefixed source root still matches,
+		// because filepath.Walk yields cleaned paths without the "./".
+		{
+			"local dot-slash source root",
+			Config{IsLocal: true, LocalSource: "./source", Include: []string{"iconify"}},
+			stringPtr("source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: local mode - a trailing slash on the source root does
+		// not break relative matching.
+		{
+			"local trailing-slash source root",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source/", Include: []string{"iconify"}},
+			stringPtr("/Users/converter/source/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: local mode - a directory whose name merely begins with
+		// ".." is still inside the root and must match include prefixes.
+		{
+			"local dot-dot-prefixed directory name",
+			Config{IsLocal: true, LocalSource: "/Users/converter/source", Include: []string{"..icons"}},
+			stringPtr("/Users/converter/source/..icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
+		// Scenario: a sibling directory sharing a string prefix with the
+		// root ("/data/source" vs "/data/source-old") is outside the root;
+		// its path must not be mangled into a bogus relative path that an
+		// include prefix could accidentally match.
+		{
+			"sibling directory sharing root prefix",
+			Config{IsLocal: true, LocalSource: "/data/source", Include: []string{"-old"}},
+			stringPtr("/data/source-old/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			false,
+		},
+		// Scenario: S3 mode - object keys never include the bucket name, so
+		// a bucket that shares a prefix with keys (bucket "iconify", keys
+		// "iconify/...") must NOT be stripped before prefix matching.
+		{
+			"s3 bucket name never stripped from keys",
+			Config{IsLocal: false, SourceBucket: "iconify", Include: []string{"iconify"}},
+			stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if got := ip.ShouldInclude(tt.args.filePath); got != tt.want {
-				t.Errorf("ImageProcessor.ShouldInclude() = %v, want %v", got, tt.want)
+			config := tt.config
+			ip := &ImageProcessor{Config: &config}
+			if got := ip.ShouldInclude(tt.filePath); got != tt.want {
+				t.Errorf("ShouldInclude() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestImageProcessor_ListFiles(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestListFiles_LocalAppliesIncludeFilter verifies local-mode listing walks
+// the source tree once and applies include/exclude rules in the processor,
+// returning only the matching contributor's files.
+func TestListFiles_LocalAppliesIncludeFilter(t *testing.T) {
+	// Scenario: two contributors on disk, include list keeps only iconify.
+	root := t.TempDir()
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
+	keys := []string{
+		"iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg",
+		"vectopus/icons/AA11BB22CC33/DD44EE55FF66/rocket.svg",
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		want    []string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+	for _, key := range keys {
+		full := filepath.Join(root, key)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatalf("failed to seed dirs: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(svg), 0644); err != nil {
+			t.Fatalf("failed to seed %s: %v", key, err)
+		}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			got, err := ip.ListFiles()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ListFiles() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ImageProcessor.ListFiles() = %v, want %v", got, tt.want)
-			}
-		})
+
+	ip := &ImageProcessor{
+		Config:      &Config{IsLocal: true, LocalSource: root, Include: []string{"iconify"}},
+		FileService: &fileservice.LocalFileService{SourceRoot: root},
+	}
+
+	files, err := ip.ListFiles()
+	if err != nil {
+		t.Fatalf("ListFiles() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("ListFiles() = %v, want only the iconify file", files)
+	}
+	if files[0] != filepath.Join(root, keys[0]) {
+		t.Errorf("ListFiles()[0] = %q, want %q", files[0], filepath.Join(root, keys[0]))
 	}
 }
 
-func TestImageProcessor_ListDirs(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestIsDir verifies directory detection for a dir, a file, and a missing
+// path.
+func TestIsDir(t *testing.T) {
+	// Scenario: a real directory, a real file, and a nonexistent path.
+	dir := t.TempDir()
+	file := filepath.Join(dir, "coffee-cup.svg")
+	if err := os.WriteFile(file, []byte("<svg/>"), 0644); err != nil {
+		t.Fatalf("failed to seed file: %v", err)
 	}
-	type args struct {
-		rootdir string
+
+	if got, err := IsDir(dir); err != nil || !got {
+		t.Errorf("IsDir(dir) = %v, %v; want true, nil", got, err)
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+	if got, err := IsDir(file); err != nil || got {
+		t.Errorf("IsDir(file) = %v, %v; want false, nil", got, err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			got, err := ip.ListDirs(tt.args.rootdir)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ListDirs() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ImageProcessor.ListDirs() = %v, want %v", got, tt.want)
-			}
-		})
+	if got, err := IsDir(filepath.Join(dir, "missing")); err != nil || got {
+		t.Errorf("IsDir(missing) = %v, %v; want false, nil", got, err)
 	}
 }
 
-func TestImageProcessor_IsValidContributor(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestIsFile verifies file detection for a file, a dir, and a missing path.
+func TestIsFile(t *testing.T) {
+	// Scenario: a real file, a real directory, and a nonexistent path.
+	dir := t.TempDir()
+	file := filepath.Join(dir, "coffee-cup.svg")
+	if err := os.WriteFile(file, []byte("<svg/>"), 0644); err != nil {
+		t.Fatalf("failed to seed file: %v", err)
 	}
-	type args struct {
-		username string
+
+	if got, err := IsFile(file); err != nil || !got {
+		t.Errorf("IsFile(file) = %v, %v; want true, nil", got, err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   bool
-	}{
-		// TODO: Add test cases.
+	if got, err := IsFile(dir); err != nil || got {
+		t.Errorf("IsFile(dir) = %v, %v; want false, nil", got, err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if got := ip.IsValidContributor(tt.args.username); got != tt.want {
-				t.Errorf("ImageProcessor.IsValidContributor() = %v, want %v", got, tt.want)
-			}
-		})
+	if got, err := IsFile(filepath.Join(dir, "missing")); err != nil || got {
+		t.Errorf("IsFile(missing) = %v, %v; want false, nil", got, err)
 	}
 }
 
-func TestImageProcessor_ListFilesForContributor(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestListDirs verifies that only first-level directories are returned.
+func TestListDirs(t *testing.T) {
+	// Scenario: a source root containing two contributor dirs and one file.
+	root := t.TempDir()
+	for _, name := range []string{"iconify", "vectopus"} {
+		if err := os.Mkdir(filepath.Join(root, name), 0755); err != nil {
+			t.Fatalf("failed to create dir: %v", err)
+		}
 	}
-	type args struct {
-		contributor string
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{}"), 0644); err != nil {
+		t.Fatalf("failed to seed file: %v", err)
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+
+	ip := &ImageProcessor{Config: &Config{}}
+	dirs, err := ip.ListDirs(root)
+	if err != nil {
+		t.Fatalf("ListDirs() error = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			got, err := ip.ListFilesForContributor(tt.args.contributor)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ListFilesForContributor() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ImageProcessor.ListFilesForContributor() = %v, want %v", got, tt.want)
-			}
-		})
+	if len(dirs) != 2 {
+		t.Fatalf("ListDirs() = %v, want 2 directories", dirs)
+	}
+	want := map[string]bool{"iconify": true, "vectopus": true}
+	for _, d := range dirs {
+		if !want[d] {
+			t.Errorf("ListDirs() returned unexpected entry %q", d)
+		}
 	}
 }
 
-func TestImageProcessor_worker(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	type args struct {
-		id        int
-		jobs      <-chan imagefile.ImageFile
-		wg        *sync.WaitGroup
-		errorChan chan<- error
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			ip.worker(tt.args.id, tt.args.jobs, tt.args.wg, tt.args.errorChan)
-		})
+// TestListDirs_MissingRoot verifies the error contract for a nonexistent
+// root directory.
+func TestListDirs_MissingRoot(t *testing.T) {
+	// Scenario: the configured source root does not exist.
+	ip := &ImageProcessor{Config: &Config{}}
+	if _, err := ip.ListDirs(filepath.Join(t.TempDir(), "missing-root")); err == nil {
+		t.Fatal("ListDirs() with missing root: expected error, got nil")
 	}
 }
 
-func TestImageProcessor_ImageFiles(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// TestSetupLogging_FileOutput verifies logging_output=2 creates and writes
+// the configured log file.
+func TestSetupLogging_FileOutput(t *testing.T) {
+	// Scenario: file-only logging writes messages to the configured logfile.
+	defer resetLogging()
+
+	logfile := filepath.Join(t.TempDir(), "image-processor.log")
+	ip := &ImageProcessor{Config: &Config{LoggingOutput: 2, Logfile: logfile}}
+
+	if err := ip.SetupLogging(); err != nil {
+		t.Fatalf("SetupLogging() error = %v", err)
 	}
-	type args struct {
-		files []string
+	log.Printf("processed iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg")
+
+	content, err := os.ReadFile(logfile)
+	if err != nil {
+		t.Fatalf("log file not created: %v", err)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   []imagefile.ImageFile
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if got := ip.ImageFiles(tt.args.files); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ImageProcessor.ImageFiles() = %v, want %v", got, tt.want)
-			}
-		})
+	if len(content) == 0 {
+		t.Error("log file is empty, want logged message")
 	}
 }
 
-func TestImageProcessor_ProcessFiles(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.ProcessFiles(); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.ProcessFiles() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+// TestSetupLogging_InvalidSetting verifies the error contract for an
+// out-of-range logging_output value.
+func TestSetupLogging_InvalidSetting(t *testing.T) {
+	// Scenario: logging_output=7 is not a documented mode.
+	defer resetLogging()
+
+	ip := &ImageProcessor{Config: &Config{LoggingOutput: 7, Logfile: filepath.Join(t.TempDir(), "x.log")}}
+	if err := ip.SetupLogging(); err == nil {
+		t.Fatal("SetupLogging() with invalid setting: expected error, got nil")
 	}
 }
 
-func TestImageProcessor_Run(t *testing.T) {
-	type fields struct {
-		UUID          string
-		Contributor   string
-		Config        *Config
-		Session       *session.Session
-		DownloadQueue chan imagefile.ImageFile
-		ProcessQueue  chan imagefile.ImageFile
-		FileService   fileservice.IFileService
+// resetLogging restores the global logger state mutated by SetupLogging.
+func resetLogging() {
+	log.SetOutput(os.Stderr)
+	log.SetFlags(log.LstdFlags)
+}
+
+// TestIsLocalRun verifies the local-mode flag passthrough.
+func TestIsLocalRun(t *testing.T) {
+	// Scenario: local-mode and S3-mode configs.
+	if !(&ImageProcessor{Config: &Config{IsLocal: true}}).IsLocalRun() {
+		t.Error("IsLocalRun() = false for is_local: true config")
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := &ImageProcessor{
-				UUID:          tt.fields.UUID,
-				Contributor:   tt.fields.Contributor,
-				Config:        tt.fields.Config,
-				Session:       tt.fields.Session,
-				DownloadQueue: tt.fields.DownloadQueue,
-				ProcessQueue:  tt.fields.ProcessQueue,
-				FileService:   tt.fields.FileService,
-			}
-			if err := ip.Run(); (err != nil) != tt.wantErr {
-				t.Errorf("ImageProcessor.Run() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	if (&ImageProcessor{Config: &Config{IsLocal: false}}).IsLocalRun() {
+		t.Error("IsLocalRun() = true for is_local: false config")
 	}
 }

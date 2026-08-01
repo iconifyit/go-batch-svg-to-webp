@@ -31,7 +31,27 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-RAMDISK_PATH="/Volumes/$RAMDISK_NAME"
+# Resolve the actual mount point of the device we just created. If a stale
+# volume with the same name is already mounted, macOS mounts the new one at
+# "/Volumes/<name> 1" (2, 3, ...), so the hardcoded path would point at the
+# wrong disk - and cleanup would eject the wrong volume. diskutil reports
+# "Not mounted" (a non-empty string) while the volume is still mounting, so
+# retry briefly and treat that value as a failure.
+RAMDISK_PATH=""
+for _ in 1 2 3 4 5; do
+  RAMDISK_PATH=$(diskutil info "$RAMDISK_DEV" | awk -F': *' '/Mount Point/ {print $2}')
+  case "$RAMDISK_PATH" in
+    ""|"Not mounted"*) sleep 1 ;;
+    *) break ;;
+  esac
+done
+case "$RAMDISK_PATH" in
+  ""|"Not mounted"*)
+    echo "Failed to resolve RAM disk mount point."
+    hdiutil detach "$RAMDISK_DEV"
+    exit 1
+    ;;
+esac
 echo "RAM disk is mounted at: $RAMDISK_PATH"
 
 # Update config.yml for RAM disk paths
@@ -90,15 +110,27 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "Done!"
+# Preserve the run's results before destroying the RAM disk. The processor
+# writes WebP files to <work_dir>/<uuid>/output on the RAM disk; copy them
+# to the local output folder so ejecting does not discard them.
+OUTPUT_DEST="./test/output"
+mkdir -p "$OUTPUT_DEST"
+find "$RAMDISK_PATH" -type d -name output | while read -r RUN_OUTPUT; do
+  echo "Copying results from $RUN_OUTPUT to $OUTPUT_DEST..."
+  cp -R "$RUN_OUTPUT"/. "$OUTPUT_DEST"/
+done
 
-# Uncomment below to automatically destroy the RAM disk
-# echo "Ejecting RAM disk..."
-# diskutil eject "$RAMDISK_PATH"
-# if [ $? -ne 0 ]; then
-#   echo "Failed to eject RAM disk."
-#   exit 1
-# fi
-# echo "RAM disk destroyed."
+# Destroy the RAM disk now that the results are safe
+echo "Ejecting RAM disk..."
+if ! diskutil eject "$RAMDISK_PATH"; then
+  echo "diskutil eject failed; detaching device $RAMDISK_DEV..."
+  if ! hdiutil detach "$RAMDISK_DEV"; then
+    echo "Failed to remove RAM disk $RAMDISK_DEV mounted at $RAMDISK_PATH."
+    exit 1
+  fi
+fi
+echo "RAM disk removed."
+
+echo "Done!"
 
 exit 0

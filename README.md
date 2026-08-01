@@ -2,6 +2,12 @@
 
 A production-grade CLI tool built in Go to batch-convert 500,000+ SVG images to optimized WebP format at multiple sizes. Originally developed for [VectorIcons.com](https://vectoricons.com), a multi-vendor marketplace for vector illustrations and icons.
 
+## A Note on Scope
+
+This is a working application, but it was built for one specific production task: backfilling WebP renditions for an existing marketplace. It is not a general-purpose conversion tool, and some pieces will not work outside that environment — the PostgreSQL contributor validation and the AWS role/S3 integration are tied to VectorIcons infrastructure. I left them in deliberately so the code reflects a real production workload rather than a sanitized demo.
+
+Treat this repo as a reference for building high-throughput, concurrent image-conversion pipelines in Go — worker pools, buffered channels, and a multi-stage processing pipeline — rather than as a drop-in tool. If you want to reuse it for your own conversions, see [Adapting This Code for Your Own Use](#adapting-this-code-for-your-own-use) below for how to strip out the environment-specific parts.
+
 ## The Problem
 
 When VectorIcons launched, only PNG conversions were performed at upload time to save on development time. Later, we needed to generate multiple WebP versions retroactively for CDN delivery, previews, and browser compatibility across 500,000+ existing images.
@@ -198,6 +204,9 @@ processWG.Wait()  // Wait for all processing
 
 ### Prerequisites
 
+- **Go 1.22+**
+- **rsvg-convert** and **ffmpeg** on your PATH:
+
 ```bash
 # macOS
 brew install librsvg ffmpeg
@@ -206,21 +215,35 @@ brew install librsvg ffmpeg
 sudo apt-get install librsvg2-bin ffmpeg
 ```
 
-### Build
+- **AWS credentials** (via `~/.aws` or environment) that can assume the IAM role named in `config.yml`. The `setup.sh` script creates a suitable role with read/write access to your S3 buckets.
+- **PostgreSQL** reachable with a `users` table containing the contributor you process. The contributor name passed on the command line is validated against this table at startup.
+
+### Environment
+
+The database connection is configured through a `.env` file in the project root (never commit this file — it is gitignored):
 
 ```bash
-go build -o image-processor ./src/image-processor
+POSTGRES_HOST=your-database-host
+POSTGRES_PORT=5432
+POSTGRES_USER=your-database-user
+POSTGRES_PASS=your-database-password
+POSTGRES_DB=your-database-name
 ```
+
+If no `.env` file exists, the same variables are read from the process environment.
 
 ### Configuration
 
-Create a `config.yaml` file:
+Copy `config-example.yml` to `config.yml` and adjust it. The values that matter most for a local run:
 
 ```yaml
 aws_region: us-east-1
-source_bucket: png-image-source-bucket
-target_bucket: webp-output-target-bucket
-role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role
+role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role  # role your AWS user can assume
+
+# Local mode: read SVGs from local_source instead of S3
+is_local: true
+upload_to_s3: false
+local_source: /path/to/svg/input        # tree of {contributor}/{icons|illustrations}/{familyID}/{setID}/*.svg
 
 # Worker pool configuration
 download_worker_pool_size: 5
@@ -232,17 +255,43 @@ webp_sizes:
   preview: 512
   watermark: 512
 
-# Optional
-watermark_path: /path/to/watermark.svg
-use_hardware_acceleration: true
-auto_cleanup: true
+ffmpegPath: /opt/homebrew/bin/ffmpeg    # output of `which ffmpeg`
+watermark_path: ./assets/watermark.svg
+work_dir: ./tmp/work
+use_hardware_acceleration: true          # VideoToolbox on macOS
+```
+
+In local mode, output WebP files are written under `<work_dir>/<run-uuid>/output/`; when you run through `run.sh`, the results are copied to `./test/output` before the RAM disk is destroyed. The `local_target` config value is managed internally (it is overwritten at startup) and does not control the output location.
+
+For S3 mode, set `is_local: false` and configure `source_bucket` / `target_bucket` instead of the local paths.
+
+### Build
+
+```bash
+./build.sh            # runs: go build -o image-processor main.go
 ```
 
 ### Run
 
+The recommended entry point is the wrapper script, which builds the binary, mounts a 4GB RAM disk for intermediate files, points `work_dir` at it, runs the processor, and restores your config afterward:
+
 ```bash
-./image-processor --prefix=contributor-name --config=config.yaml
+./run.sh
 ```
+
+To run the binary directly:
+
+```bash
+./image-processor -f config.yml -c contributor-name
+```
+
+### Test
+
+```bash
+go test ./...
+```
+
+The suite is self-contained: database tests verify generated SQL against a dry-run ORM session (no database needed), S3 tests run against an injected mock client (no AWS needed), and the two conversion tests skip automatically when `rsvg-convert`/`ffmpeg` are not installed.
 
 ---
 
@@ -250,16 +299,51 @@ auto_cleanup: true
 
 ```
 go-batch-svg-to-webp/
+├── main.go                 # CLI entry point
 ├── src/
-│   ├── image-processor/    # Main orchestrator & CLI
+│   ├── image-processor/    # Main orchestrator, config, pipeline
 │   ├── file-service/       # Storage abstraction (Local/S3)
 │   ├── image-file/         # Image metadata parser
 │   ├── database/           # PostgreSQL integration
 │   ├── models/             # GORM data models
 │   └── common/             # Shared utilities
-├── test/                   # Test fixtures
+├── docs/                   # Code overview, spec, roadmap
+├── build.sh / run.sh       # Build and RAM-disk run wrappers
 └── config-example.yml      # Configuration template
 ```
+
+---
+
+## Adapting This Code for Your Own Use
+
+The concurrency machinery — the worker pools, the buffered channels, and the SVG → PNG → WebP pipeline — is fully generic. What ties this app to its original environment are two integrations: PostgreSQL (used only to validate the contributor name at startup) and AWS (an STS role assumption plus the S3 storage backend). Both can be removed cleanly.
+
+### Removing the PostgreSQL dependency
+
+The database is consulted exactly once, in `IsValidContributor()`, which `NewImageProcessor()` calls during startup (`src/image-processor/main.go`). To remove it:
+
+1. Delete the `IsValidContributor()` method and the call to it in `NewImageProcessor()`. The contributor name then acts purely as a path prefix with no validation.
+2. Delete the `src/database/` and `src/models/` packages, and remove their imports from `src/image-processor/main.go`.
+3. Delete your `.env` file — nothing else reads the `POSTGRES_*` variables.
+
+### Removing the AWS dependency
+
+AWS appears in two places: session setup and the S3 storage backend.
+
+1. In `NewImageProcessor()`, delete the call to `SessionWithRole()` (and the function itself). This removes the STS role assumption, so `role_arn` in `config.yml` becomes unnecessary.
+2. In `src/file-service/IFileService.go`, simplify the `NewFileService()` factory to always return a `LocalFileService`. Then delete `S3FileService.go`, `S3FileService_test.go`, `IS3FileService.go`, and `S3FileServiceConfig.go`.
+3. Remove the now-unused AWS imports and run `go mod tidy`.
+
+### What you keep
+
+After both removals, the app reads SVGs from `local_source`, fans them out across the download and process worker pools, and writes sized WebP files locally — the interesting part of the codebase, with no external services required:
+
+- `Run()` in `src/image-processor/main.go` — worker pool orchestration with buffered channels and WaitGroups
+- `ProcessFile()`, `ConvertSVGToPNG()`, and `RunFFmpeg()` in `src/image-processor/funcs.go` — the conversion pipeline
+- `src/file-service/LocalFileService.go` — filesystem walking and transfer
+- `src/image-file/` — path parsing into structured image metadata
+
+You still need `rsvg-convert` and `ffmpeg` installed, since the pipeline shells out to them for the actual rasterization and encoding.
 
 ---
 

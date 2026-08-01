@@ -1,109 +1,66 @@
 package database
 
 import (
-	"reflect"
 	"testing"
-
-	"github.com/iconifyit/go-batch-svg-to-webp/src/models"
 
 	"gorm.io/gorm"
 )
 
-func TestDatabaseService_GetIconById(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIconById_QueryShape verifies the primary-key lookup queries the
+// icons table by id with a single-row limit.
+func TestGetIconById_QueryShape(t *testing.T) {
+	// Scenario: fetch icon 314 by primary key.
+	svc, capture := newCaptureService(t)
+
+	if _, err := svc.GetIconById(314); err != nil {
+		t.Fatalf("GetIconById() error = %v", err)
 	}
-	type args struct {
-		id int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Icon
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIconById(tt.args.id)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIconById() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIconById() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "icons"`, `"id" = $`, "LIMIT")
+	if !containsVar(capture.lastVars(t), 314) {
+		t.Errorf("bind variables %v do not include id 314", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetIcon(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIcon_AppliesFilters verifies custom filters land in the WHERE
+// clause of the single-row icons query.
+func TestGetIcon_AppliesFilters(t *testing.T) {
+	// Scenario: fetch the coffee-cup icon by slug.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetIcon(QueryParams{
+		Filters: []func(tx *gorm.DB) *gorm.DB{Where("slug", "coffee-cup")},
+	})
+	if err != nil {
+		t.Fatalf("GetIcon() error = %v", err)
 	}
-	type args struct {
-		params QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Icon
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIcon(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIcon() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIcon() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "icons"`, "slug = $", "LIMIT")
+	if !containsVar(capture.lastVars(t), "coffee-cup") {
+		t.Errorf("bind variables %v do not include slug coffee-cup", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetIcons(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetIcons_OrderLimitOffset verifies Order, Limit, and Offset shape the
+// multi-row icons query.
+func TestGetIcons_OrderLimitOffset(t *testing.T) {
+	// Scenario: page 2 of 50 icons in a set, ordered by name.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetIcons(QueryParams{
+		Order:  "name asc",
+		Limit:  50,
+		Offset: 50,
+	})
+	if err != nil {
+		t.Fatalf("GetIcons() error = %v", err)
 	}
-	type args struct {
-		params QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []models.Icon
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetIcons(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetIcons() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetIcons() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "icons"`, "ORDER BY name asc", "LIMIT", "OFFSET")
+	if !containsVar(capture.lastVars(t), 50) {
+		t.Errorf("bind variables %v do not include limit/offset 50", capture.lastVars(t))
 	}
 }

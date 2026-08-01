@@ -405,27 +405,25 @@ func (ip *ImageProcessor) downloadWorker(id int, errorChan chan<- error) {
 }
 
 func (ip *ImageProcessor) downloadFile(file *imagefile.ImageFile) (string, error) {
-	var relativePath string
+	// The destination mirrors the source-relative object key under this
+	// run's working directory: <work_dir>/<uuid>/source/<object_key>. The
+	// object key is already source-relative in both local and S3 modes.
+	sourceDir := filepath.Join(ip.Config.WorkDir, ip.UUID, "source")
+	localPath := filepath.Join(sourceDir, file.ObjectKey)
 
-	if ip.Config.IsLocal {
-		relativePath, _ = filepath.Rel(ip.Config.LocalSource, file.ObjectKey)
-	} else {
-		relativePath = file.ObjectKey
+	// Object keys are untrusted input: reject any key whose resolved
+	// destination escapes the run's source directory (e.g. ".." segments),
+	// so a crafted key cannot overwrite arbitrary local files.
+	rel, err := filepath.Rel(sourceDir, localPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("object key %q resolves outside the work directory", file.ObjectKey)
 	}
 
-	fmt.Printf("file : %s\n", file.ObjectKey)
-	fmt.Printf("relativePath : %s\n", relativePath)
+	log.Printf("Downloading %s to %s", file.ObjectKey, localPath)
 
-	// Construct the local path in the working directory
-	localPath := filepath.Join(ip.Config.WorkDir, ip.UUID, "source", relativePath)
-
-	// log.Printf("relativePath : %s", relativePath)
-	log.Printf("ip.Config.WorkDir : %s", ip.Config.WorkDir)
-	log.Printf("localPath : %s", localPath)
-	log.Printf("IP SourceDir : %s", ip.Config.LocalSource)
-	log.Printf("Downloading file : %s to %s", file.ObjectKey, filepath.Join(localPath, file.ObjectKey))
-
-	ip.FileService.Download(file, filepath.Join(localPath, file.ObjectKey))
+	if _, err := ip.FileService.Download(file, localPath); err != nil {
+		return "", err
+	}
 
 	return localPath, nil
 }
@@ -443,11 +441,17 @@ func (ip *ImageProcessor) processWorker(id int, errorChan chan<- error) {
 }
 
 // Cleanup removes temporary directories and files
+// Cleanup removes this run's temporary source and intermediate directories
+// under <work_dir>/<uuid>/. The run's output directory is left in place -
+// it holds the results - and the shared work_dir root is never removed.
 func (ip *ImageProcessor) Cleanup() {
-	if ip.Config.AutoCleanup {
-		os.Remove(filepath.Join(ip.Config.WorkDir, "source", ip.UUID))
-		os.Remove(filepath.Join(ip.Config.WorkDir, "intermediate", ip.UUID))
-		time.Sleep(1 * time.Second)
-		os.RemoveAll(ip.Config.WorkDir)
+	if !ip.Config.AutoCleanup {
+		return
+	}
+	for _, dir := range []string{"source", "intermediate"} {
+		path := filepath.Join(ip.Config.WorkDir, ip.UUID, dir)
+		if err := os.RemoveAll(path); err != nil {
+			log.Printf("Cleanup: failed to remove %s: %v", path, err)
+		}
 	}
 }
