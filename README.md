@@ -244,7 +244,6 @@ role_arn: arn:aws:iam::111111111111:role/svg-webp-app-role  # role your AWS user
 is_local: true
 upload_to_s3: false
 local_source: /path/to/svg/input        # tree of {contributor}/{icons|illustrations}/{familyID}/{setID}/*.svg
-local_target: /path/to/webp/output
 
 # Worker pool configuration
 download_worker_pool_size: 5
@@ -261,6 +260,8 @@ watermark_path: ./assets/watermark.svg
 work_dir: ./tmp/work
 use_hardware_acceleration: true          # VideoToolbox on macOS
 ```
+
+In local mode, output WebP files are written under `<work_dir>/<run-uuid>/output/`; when you run through `run.sh`, the results are copied to `./test/output` before the RAM disk is destroyed. The `local_target` config value is managed internally (it is overwritten at startup) and does not control the output location.
 
 For S3 mode, set `is_local: false` and configure `source_bucket` / `target_bucket` instead of the local paths.
 
