@@ -1,40 +1,65 @@
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'system-ui, sans-serif','primaryColor':'#e3cff3','primaryBorderColor':'#730FC3','primaryTextColor':'#293845','lineColor':'#788896','clusterBkg':'#ffffff','clusterBorder':'#788896','edgeLabelBackground':'#ffffff'}}}%%
-flowchart TB
-  subgraph Startup
-    cli([image-processor -f config.yml -c contributor]):::house --> cfg[Load YAML config, apply defaults]:::house
-    cfg --> role[Assume IAM role via STS]:::house
-    role --> val{Contributor exists in PostgreSQL?}:::house
-    val -->|yes| wire[Wire FileService: local FS or S3]:::house
-    val -. no .-> abort([Fatal exit]):::house
-  end
+graph TB
+    START([CLI Entry Point<br/>-f config.yml -c contributor]) --> CONFIG[Load YAML Config]
 
-  subgraph Discovery
-    wire --> list["List source files, apply include/exclude prefixes"]:::house
-    list --> parse[Parse paths into ImageFile metadata]:::house
-  end
+    CONFIG --> ROLE[Assume AWS IAM Role<br/>via STS]
+    ROLE --> VALIDATE[Validate Contributor<br/>in PostgreSQL]
+    VALIDATE --> FILESERVICE{Initialize<br/>FileService}
 
-  subgraph Workers["Concurrent worker pools"]
-    parse --> dq[[DownloadQueue]]:::house
-    dq --> dl["Download workers: copy SVG to work dir (local cp / S3 GetObject)"]:::house
-    dl --> pq[[ProcessQueue]]:::house
-    pq --> pw[Process workers]:::house
-    dl -. error: fail fast .-> abort
-    pw -. error: fail fast .-> abort
-  end
+    FILESERVICE -->|IsLocal=true| LOCAL[LocalFileService]
+    FILESERVICE -->|IsLocal=false| S3FS[S3FileService]
 
-  subgraph PerSize["Per size variant: thumbnail 128 / preview 512 / watermark 512"]
-    pw --> svg2png[rsvg-convert: SVG to PNG at size]:::house
-    svg2png --> wm{Watermark variant?}:::house
-    wm -->|yes| overlay[ffmpeg: watermark overlay]:::house
-    overlay --> webp[ffmpeg: PNG to WebP]:::house
-    wm -->|no| webp
-    webp --> mode{S3 mode?}:::house
-    mode -->|yes| s3[(Target S3 bucket)]:::house
-    mode -->|no| outdir[("Run output dir (run.sh collects results)")]:::house
-  end
+    LOCAL --> LISTFILES[List and Parse Files]
+    S3FS --> LISTFILES
 
-  s3 --> cleanup["Cleanup run temp dirs (auto_cleanup)"]:::house
-  outdir --> cleanup
-  cleanup --> done([Done]):::house
+    LISTFILES --> IMAGEFILES[Create ImageFile Objects<br/>Parse Path Structure]
+    IMAGEFILES --> QUEUES[Initialize Buffered Channels]
 
-  classDef house fill:#e3cff3,stroke:#730FC3,stroke-width:2px,color:#293845;
+    QUEUES --> DOWNLOADQ[Download Queue<br/>chan ImageFile]
+    QUEUES --> PROCESSQ[Process Queue<br/>chan ImageFile]
+
+    DOWNLOADQ --> DLW1[Download Worker 1]
+    DOWNLOADQ --> DLW2[Download Worker 2]
+    DOWNLOADQ --> DLW3[Download Worker 3]
+    DOWNLOADQ --> DLWN[Download Worker N]
+
+    DLW1 --> FETCH1[Fetch from Source]
+    DLW2 --> FETCH2[Fetch from Source]
+    DLW3 --> FETCH3[Fetch from Source]
+    DLWN --> FETCHN[Fetch from Source]
+
+    FETCH1 --> PROCESSQ
+    FETCH2 --> PROCESSQ
+    FETCH3 --> PROCESSQ
+    FETCHN --> PROCESSQ
+
+    PROCESSQ --> PW1[Process Worker 1]
+    PROCESSQ --> PW2[Process Worker 2]
+    PROCESSQ --> PW3[Process Worker 3]
+    PROCESSQ --> PWN[Process Worker N]
+
+    PW1 --> SIZES[For Each Size<br/>thumbnail, preview, watermark]
+    PW2 --> SIZES
+    PW3 --> SIZES
+    PWN --> SIZES
+    SIZES --> SVG2PNG[SVG to PNG<br/>rsvg-convert]
+
+    SVG2PNG --> CHECKWM{Watermark<br/>Size?}
+    CHECKWM -->|Yes| APPLYWM[Apply Watermark<br/>ffmpeg overlay filter]
+    CHECKWM -->|No| PNG2WEBP[PNG to WebP<br/>ffmpeg -q:v 75]
+    APPLYWM --> PNG2WEBP
+
+    PNG2WEBP --> UPLOADCHECK{Upload<br/>to S3?}
+    UPLOADCHECK -->|Yes| S3UPLOAD[S3 PutObject<br/>Target Bucket]
+    UPLOADCHECK -->|No| LOCALSAVE[Keep in Run Output Dir<br/>run.sh collects results]
+
+    S3UPLOAD --> CLEANUP[Cleanup Temp Files<br/>source, intermediate]
+    LOCALSAVE --> CLEANUP
+
+    CLEANUP --> DONE([Processing Complete<br/>Log Results])
+
+    style START fill:#e1f5ff,stroke:#0066cc
+    style FILESERVICE fill:#fff4e1,stroke:#cc9900
+    style DOWNLOADQ fill:#f0e1ff,stroke:#9933cc
+    style PROCESSQ fill:#f0e1ff,stroke:#9933cc
+    style SIZES fill:#e1ffe1,stroke:#009933
+    style VALIDATE fill:#ffe1e1,stroke:#cc0000
