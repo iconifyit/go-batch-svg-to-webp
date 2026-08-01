@@ -49,12 +49,12 @@ graph TB
     CHECKWM -->|No| PNG2WEBP[PNG to WebP<br/>ffmpeg -q:v 75]
     APPLYWM --> PNG2WEBP
 
-    PNG2WEBP --> UPLOADCHECK{Upload<br/>to S3?}
-    UPLOADCHECK -->|Yes| S3UPLOAD[S3 PutObject<br/>Target Bucket]
-    UPLOADCHECK -->|No| LOCALSAVE[Keep in Run Output Dir<br/>run.sh collects results]
+    PNG2WEBP --> WRITEOUT[WebP Saved to Run Output Dir<br/>run.sh collects results]
+    WRITEOUT --> UPLOADCHECK{S3 Mode?<br/>IsLocal=false}
+    UPLOADCHECK -->|Yes| S3UPLOAD[Also Upload to Target Bucket<br/>FileService.Transfer]
+    UPLOADCHECK -->|No| CLEANUP[Cleanup Temp Files<br/>source, intermediate]
 
-    S3UPLOAD --> CLEANUP[Cleanup Temp Files<br/>source, intermediate]
-    LOCALSAVE --> CLEANUP
+    S3UPLOAD --> CLEANUP
 
     CLEANUP --> DONE([Processing Complete<br/>Log Results])
 
