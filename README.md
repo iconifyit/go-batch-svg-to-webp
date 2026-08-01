@@ -88,7 +88,7 @@ For each image, the processor generates multiple sizes (thumbnail: 128px, previe
 1. **SVG → PNG Conversion** using `rsvg-convert` at target dimensions
 2. **Optional Watermarking** using ffmpeg's overlay filter for the watermark variant
 3. **PNG → WebP Conversion** using ffmpeg with quality optimization (`-q:v 75`)
-4. **Delivery**: every WebP is written to the run's output directory (`<work_dir>/<uuid>/output`; `run.sh` collects results into `./test/output`). Files are additionally uploaded to the target S3 bucket when reading from S3 (`is_local: false`) or when `upload_to_s3` is enabled
+4. **Delivery**: every WebP is written to the run's output directory (`<work_dir>/<uuid>/output`; `run.sh` collects results into `./test/output`). S3 upload is optional, controlled by the local flag: when `is_local: false`, each WebP is also uploaded to the target bucket
 
 ### Concurrency Model
 
