@@ -26,6 +26,48 @@ func TestNewFileService_Local(t *testing.T) {
 	}
 }
 
+// TestNewS3FileService_PopulatesBuckets verifies the exported constructor
+// wires the roots into bucket names, matching the factory contract.
+func TestNewS3FileService_PopulatesBuckets(t *testing.T) {
+	// Scenario: direct construction via the exported constructor.
+	svc := NewS3FileService(&ServiceInput{
+		UUID:       "02b5e8da-a37b-4666-9892-44706466438e",
+		SourceRoot: "vectoricons-private",
+		TargetRoot: "vectoricons-webp-staging",
+	})
+	s3svc, ok := svc.(*S3FileService)
+	if !ok {
+		t.Fatalf("NewS3FileService() = %T, want *S3FileService", svc)
+	}
+	if s3svc.SourceBucket != "vectoricons-private" {
+		t.Errorf("SourceBucket = %q, want %q", s3svc.SourceBucket, "vectoricons-private")
+	}
+	if s3svc.TargetBucket != "vectoricons-webp-staging" {
+		t.Errorf("TargetBucket = %q, want %q", s3svc.TargetBucket, "vectoricons-webp-staging")
+	}
+}
+
+// TestNewLocalFileService_PopulatesRoots verifies the exported constructor
+// wires the local roots, matching the factory contract.
+func TestNewLocalFileService_PopulatesRoots(t *testing.T) {
+	// Scenario: direct construction via the exported constructor.
+	svc := NewLocalFileService(&ServiceInput{
+		UUID:       "02b5e8da-a37b-4666-9892-44706466438e",
+		SourceRoot: "./test/input",
+		TargetRoot: "./test/output",
+	})
+	local, ok := svc.(*LocalFileService)
+	if !ok {
+		t.Fatalf("NewLocalFileService() = %T, want *LocalFileService", svc)
+	}
+	if local.SourceRoot != "./test/input" {
+		t.Errorf("SourceRoot = %q, want %q", local.SourceRoot, "./test/input")
+	}
+	if local.TargetRoot != "./test/output" {
+		t.Errorf("TargetRoot = %q, want %q", local.TargetRoot, "./test/output")
+	}
+}
+
 // TestNewFileService_S3 verifies the factory returns an S3FileService wired
 // with the bucket names when IsLocal is not set.
 func TestNewFileService_S3(t *testing.T) {

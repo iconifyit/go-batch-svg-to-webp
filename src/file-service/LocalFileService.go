@@ -25,8 +25,10 @@ type LocalFileService struct {
 // @Return IFileService
 func NewLocalFileService(config *ServiceInput) IFileService {
 	return &LocalFileService{
-		UUID:    config.UUID,
-		Session: config.Session,
+		UUID:       config.UUID,
+		Session:    config.Session,
+		SourceRoot: config.SourceRoot,
+		TargetRoot: config.TargetRoot,
 	}
 }
 

@@ -72,8 +72,10 @@ func contentTypeForFile(path string) string {
 
 func NewS3FileService(config *ServiceInput) IFileService {
 	return &S3FileService{
-		UUID:    config.UUID,
-		Session: config.Session,
+		UUID:         config.UUID,
+		Session:      config.Session,
+		SourceBucket: config.SourceRoot,
+		TargetBucket: config.TargetRoot,
 	}
 }
 
