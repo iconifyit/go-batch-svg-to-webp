@@ -102,20 +102,34 @@ func NewImageProcessor(contributor, configFile string) *ImageProcessor {
 
 	config.LocalTarget = filepath.Join(config.WorkDir, contributor, kUUID)
 
+	// Wire the file service with mode-appropriate roots: local paths for
+	// local runs, bucket names for S3 runs. The assumed-role session is
+	// passed through so the S3 implementation can build a real client.
+	sourceRoot := config.LocalSource
+	targetRoot := config.LocalTarget
+	if !config.IsLocal {
+		sourceRoot = config.SourceBucket
+		targetRoot = config.TargetBucket
+	}
+
 	imageProcessor.FileService = fileservice.NewFileService(fileservice.ServiceInput{
 		UUID:       kUUID,
 		IsLocal:    config.IsLocal,
-		SourceRoot: config.LocalSource,
-		TargetRoot: config.LocalTarget,
+		Session:    sess,
+		SourceRoot: sourceRoot,
+		TargetRoot: targetRoot,
 	})
 
-	// Test if the localSource folder exists:
-	exists, err := IsDir(config.LocalSource)
-	if err != nil {
-		log.Fatalf("Failed to check if local source directory exists: %v", err)
-	}
-	if !exists {
-		log.Fatalf("Local source directory does not exist: %s", config.LocalSource)
+	// Local mode requires the source directory to exist; S3 mode has no
+	// local source to check.
+	if config.IsLocal {
+		exists, err := IsDir(config.LocalSource)
+		if err != nil {
+			log.Fatalf("Failed to check if local source directory exists: %v", err)
+		}
+		if !exists {
+			log.Fatalf("Local source directory does not exist: %s", config.LocalSource)
+		}
 	}
 
 	return imageProcessor
@@ -213,7 +227,10 @@ func (ip *ImageProcessor) SetupLogging() error {
 	return nil
 }
 
-// ShouldInclude checks if a file should be included based on the include and exclude lists
+// ShouldInclude checks if a file should be included based on the include and
+// exclude lists. In local mode, prefixes are matched against the path
+// relative to LocalSource; S3 object keys are already bucket-relative and
+// are matched as-is, so the same prefixes work in both modes.
 func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	include := ip.Config.Include
 	exclude := ip.Config.Exclude
@@ -222,10 +239,6 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 		return false
 	}
 
-	log.Printf("Should Include file: %s", *filePath)
-	log.Printf("Include: %v", include)
-	log.Printf("Exclude: %v\n", exclude)
-
 	fileName := filepath.Base(*filePath)
 
 	// Exclude hidden files (e.g., .DS_Store or files starting with '.')
@@ -233,10 +246,35 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 		return false
 	}
 
+	// Strip the source root so prefixes like "iconify" match regardless of
+	// where the source tree lives on disk. This applies to local mode only:
+	// S3 object keys never include the bucket name, so stripping a bucket
+	// that happens to share a prefix with keys would mangle them - S3 keys
+	// are matched as-is. filepath.Rel is path-aware, so unclean local roots
+	// (./source, trailing slashes) still resolve; unrelatable paths fall
+	// back to literal separator-boundary trimming.
+	relPath := *filePath
+	if ip.Config.IsLocal && ip.Config.LocalSource != "" {
+		sourceRoot := ip.Config.LocalSource
+		// A path is outside the root only when Rel yields ".." itself or a
+		// "../" prefix; a plain ".." string prefix would also wrongly match
+		// names like "..icons".
+		if rel, err := filepath.Rel(sourceRoot, *filePath); err == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			relPath = filepath.ToSlash(rel)
+		} else if strings.HasPrefix(relPath, sourceRoot+"/") {
+			// Literal fallback for unrelatable paths: only strip the root
+			// when the boundary is a separator, so a sibling like
+			// "/data/source-old" is not mangled by a "/data/source" root.
+			relPath = relPath[len(sourceRoot)+1:]
+		} else if strings.HasSuffix(sourceRoot, "/") && strings.HasPrefix(relPath, sourceRoot) {
+			relPath = relPath[len(sourceRoot):]
+		}
+	}
+
 	// Check for exclusion
 	for _, prefix := range exclude {
-		log.Printf("Checking prefix: %s - %s", prefix, *filePath)
-		if strings.HasPrefix(*filePath, prefix) {
+		if strings.HasPrefix(relPath, prefix) {
 			return false // Exclude the file if it matches any prefix in `exclude`
 		}
 	}
@@ -248,7 +286,7 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 
 	// Check for inclusion
 	for _, prefix := range include {
-		if strings.HasPrefix(*filePath, prefix) {
+		if strings.HasPrefix(relPath, prefix) {
 			return true
 		}
 	}
@@ -265,10 +303,32 @@ func (ip *ImageProcessor) ListFiles() ([]string, error) {
 	} else {
 		sourceRoot = ip.Config.SourceBucket
 	}
-	return ip.FileService.ListFiles(
+	// S3 listing applies the filter per key, which is cheap. Local listing
+	// runs per-file image parsing inside the service when given a filter,
+	// so walk with a nil filter instead and apply the include/exclude
+	// rules here - ImageFiles() performs the actual parse exactly once.
+	if !ip.Config.IsLocal {
+		return ip.FileService.ListFiles(
+			fileservice.ListFilesInput{SourceRoot: sourceRoot},
+			ip.ShouldInclude,
+		)
+	}
+
+	files, err := ip.FileService.ListFiles(
 		fileservice.ListFilesInput{SourceRoot: sourceRoot},
-		nil, // ip.ShouldInclude,
+		nil,
 	)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []string
+	for _, file := range files {
+		path := file
+		if ip.ShouldInclude(&path) {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered, nil
 }
 
 // ListDirs lists directories in a given folder, 1-level deep

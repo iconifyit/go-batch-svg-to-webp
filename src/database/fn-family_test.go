@@ -1,109 +1,68 @@
 package database
 
 import (
-	"reflect"
 	"testing"
-
-	"github.com/iconifyit/go-batch-svg-to-webp/src/models"
 
 	"gorm.io/gorm"
 )
 
-func TestDatabaseService_GetFamilyById(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetFamilyById_QueryShape verifies the primary-key lookup queries the
+// families table by id with a single-row limit.
+func TestGetFamilyById_QueryShape(t *testing.T) {
+	// Scenario: fetch product family 7 by primary key.
+	svc, capture := newCaptureService(t)
+
+	if _, err := svc.GetFamilyById(7); err != nil {
+		t.Fatalf("GetFamilyById() error = %v", err)
 	}
-	type args struct {
-		id int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Family
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetFamilyById(tt.args.id)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetFamilyById() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetFamilyById() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "families"`, `"id" = $`, "LIMIT")
+	if !containsVar(capture.lastVars(t), 7) {
+		t.Errorf("bind variables %v do not include id 7", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetFamily(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetFamily_AppliesFiltersAndOrder verifies filters and the Order param
+// shape the single-row families query.
+func TestGetFamily_AppliesFiltersAndOrder(t *testing.T) {
+	// Scenario: fetch the diversity-avatars family by unique_id, newest first.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetFamily(&QueryParams{
+		Filters: []func(tx *gorm.DB) *gorm.DB{Where("unique_id", "2C11DB2D5F79")},
+		Order:   "created_at desc",
+	})
+	if err != nil {
+		t.Fatalf("GetFamily() error = %v", err)
 	}
-	type args struct {
-		params *QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *models.Family
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetFamily(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetFamily() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetFamily() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "families"`, "unique_id = $", "ORDER BY created_at desc", "LIMIT")
+	if !containsVar(capture.lastVars(t), "2C11DB2D5F79") {
+		t.Errorf("bind variables %v do not include the family unique id", capture.lastVars(t))
 	}
 }
 
-func TestDatabaseService_GetFamilies(t *testing.T) {
-	type fields struct {
-		DB *gorm.DB
+// TestGetFamilies_LimitAndOffset verifies Order, Limit, and Offset shape the
+// multi-row families query.
+func TestGetFamilies_LimitAndOffset(t *testing.T) {
+	// Scenario: second page of 10 families for a contributor listing.
+	svc, capture := newCaptureService(t)
+
+	_, err := svc.GetFamilies(QueryParams{
+		Order:  "name asc",
+		Limit:  10,
+		Offset: 10,
+	})
+	if err != nil {
+		t.Fatalf("GetFamilies() error = %v", err)
 	}
-	type args struct {
-		params QueryParams
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []models.Family
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &DatabaseService{
-				DB: tt.fields.DB,
-			}
-			got, err := svc.GetFamilies(tt.args.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseService.GetFamilies() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DatabaseService.GetFamilies() = %v, want %v", got, tt.want)
-			}
-		})
+
+	sql := capture.last(t)
+	mustContain(t, sql, `FROM "families"`, "ORDER BY name asc", "LIMIT", "OFFSET")
+	vars := capture.lastVars(t)
+	if !containsVar(vars, 10) {
+		t.Errorf("bind variables %v do not include limit/offset 10", vars)
 	}
 }

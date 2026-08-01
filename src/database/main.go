@@ -3,7 +3,9 @@ package database
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -27,32 +29,71 @@ type Config struct {
 }
 
 func init() {
-	// Load the .env file during package initialization
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+	// Load the .env file during package initialization. A missing .env is not
+	// fatal: configuration may be provided directly via environment variables
+	// (e.g. in CI or production). Other load failures (parse or permission
+	// errors) are surfaced as warnings so a broken .env is not mistaken for
+	// an absent one.
+	if err := godotenv.Load(); err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("No .env file found; using environment variables")
+		} else {
+			log.Printf("Warning: failed to load .env file: %v; using environment variables", err)
+		}
 	}
+}
+
+// buildDSN assembles the PostgreSQL connection URL from the POSTGRES_* env
+// vars. Values are whitespace-trimmed (stray spaces in .env files are
+// common and invalid in URLs) and credentials use userinfo escaping via
+// url.UserPassword, so passwords containing special characters (+, @, /,
+// spaces) are transmitted correctly.
+func buildDSN() string {
+	env := func(key string) string {
+		return strings.TrimSpace(os.Getenv(key))
+	}
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(env("POSTGRES_USER"), env("POSTGRES_PASS")),
+		Host:     env("POSTGRES_HOST") + ":" + env("POSTGRES_PORT"),
+		Path:     env("POSTGRES_DB"),
+		RawQuery: "sslmode=disable",
+	}
+	return dsn.String()
+}
+
+// redactCredentials removes the database password from an error message.
+// Driver parse errors echo the full DSN, so surfacing them verbatim would
+// leak credentials into logs. Both the raw and userinfo-escaped forms are
+// replaced.
+func redactCredentials(err error) string {
+	msg := err.Error()
+	pass := strings.TrimSpace(os.Getenv("POSTGRES_PASS"))
+	if pass == "" {
+		return msg
+	}
+	escaped := strings.TrimPrefix(url.UserPassword("u", pass).String(), "u:")
+	for _, needle := range []string{escaped, pass} {
+		msg = strings.ReplaceAll(msg, needle, "[REDACTED]")
+	}
+	return msg
 }
 
 // NewDatabaseService initializes and returns a new DatabaseService instance
 func NewDatabaseService() (*DatabaseService, error) {
-	// Load environment variables (use godotenv if needed)
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		os.Getenv("POSTGRES_HOST"),
-		os.Getenv("POSTGRES_USER"),
-		os.Getenv("POSTGRES_PASS"),
-		os.Getenv("POSTGRES_DB"),
-		os.Getenv("POSTGRES_PORT"),
-	)
+	dsn := buildDSN()
 
-	fmt.Println(dsn)
+	// Never log the DSN itself - it contains the database password. Log only
+	// the non-secret connection coordinates for troubleshooting.
+	log.Printf("Connecting to PostgreSQL host=%s dbname=%s port=%s",
+		os.Getenv("POSTGRES_HOST"), os.Getenv("POSTGRES_DB"), os.Getenv("POSTGRES_PORT"))
 
 	// Configure Gorm with logger
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info), // Adjust log level as needed
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %v", err)
+		return nil, fmt.Errorf("failed to connect to the database: %s", redactCredentials(err))
 	}
 
 	// Configure connection pooling
