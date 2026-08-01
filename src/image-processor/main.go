@@ -247,16 +247,15 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	}
 
 	// Strip the source root so prefixes like "iconify" match regardless of
-	// where the source tree lives on disk. filepath.Rel is path-aware, so
-	// unclean roots (./source, trailing slashes) still resolve; paths that
-	// cannot be related to the root fall back to literal prefix trimming,
-	// which keeps S3 object keys (already root-relative) untouched.
-	sourceRoot := ip.Config.SourceBucket
-	if ip.Config.IsLocal {
-		sourceRoot = ip.Config.LocalSource
-	}
+	// where the source tree lives on disk. This applies to local mode only:
+	// S3 object keys never include the bucket name, so stripping a bucket
+	// that happens to share a prefix with keys would mangle them - S3 keys
+	// are matched as-is. filepath.Rel is path-aware, so unclean local roots
+	// (./source, trailing slashes) still resolve; unrelatable paths fall
+	// back to literal separator-boundary trimming.
 	relPath := *filePath
-	if sourceRoot != "" {
+	if ip.Config.IsLocal && ip.Config.LocalSource != "" {
+		sourceRoot := ip.Config.LocalSource
 		// A path is outside the root only when Rel yields ".." itself or a
 		// "../" prefix; a plain ".." string prefix would also wrongly match
 		// names like "..icons".
@@ -264,8 +263,8 @@ func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			relPath = filepath.ToSlash(rel)
 		} else if strings.HasPrefix(relPath, sourceRoot+"/") {
-			// Literal fallback (S3 keys, unrelatable paths): only strip the
-			// root when the boundary is a separator, so a sibling like
+			// Literal fallback for unrelatable paths: only strip the root
+			// when the boundary is a separator, so a sibling like
 			// "/data/source-old" is not mangled by a "/data/source" root.
 			relPath = relPath[len(sourceRoot)+1:]
 		} else if strings.HasSuffix(sourceRoot, "/") && strings.HasPrefix(relPath, sourceRoot) {

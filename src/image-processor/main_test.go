@@ -95,6 +95,15 @@ func TestShouldInclude(t *testing.T) {
 			stringPtr("/data/source-old/iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
 			false,
 		},
+		// Scenario: S3 mode - object keys never include the bucket name, so
+		// a bucket that shares a prefix with keys (bucket "iconify", keys
+		// "iconify/...") must NOT be stripped before prefix matching.
+		{
+			"s3 bucket name never stripped from keys",
+			Config{IsLocal: false, SourceBucket: "iconify", Include: []string{"iconify"}},
+			stringPtr("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"),
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
