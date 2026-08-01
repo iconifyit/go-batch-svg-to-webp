@@ -14,9 +14,6 @@ import (
 	fileservice "github.com/iconifyit/go-batch-svg-to-webp/src/file-service"
 	imagefile "github.com/iconifyit/go-batch-svg-to-webp/src/image-file"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/uuid"
 )
 
@@ -256,17 +253,6 @@ func (ip *ImageProcessor) ProcessFile(imgFile imagefile.ImageFile) error {
 
 	// log.Printf("fsvc : %s", fn.ToJSON(fsvc))
 
-	// s3Client := s3.New(
-
-	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String(ip.Config.Region),
-	})
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	s3Client := s3.New(sess)
-
 	// // Process each size for WebP conversion
 	for suffix, size := range ip.Config.WebpSizes {
 		ext := filepath.Ext(imgFile.ObjectKey)
@@ -301,23 +287,12 @@ func (ip *ImageProcessor) ProcessFile(imgFile imagefile.ImageFile) error {
 		log.Printf("outputKey : %s", outputKey)
 		log.Printf("targetWebpFilePath : %s", targetWebpFilePath)
 
-		if ip.Config.UploadToS3 {
-			output, err := s3Client.PutObject(&s3.PutObjectInput{
-				Bucket: aws.String(ip.Config.TargetBucket),
-				Key:    aws.String(outputKey),
-				Body:   aws.ReadSeekCloser(strings.NewReader(targetWebpFilePath)),
-			})
-			if err != nil {
-				log.Fatalf("failed to upload file, %v", err)
-			}
-			log.Printf("S3 Upload result : %s", fn.ToJSON(output))
-		}
-
-		// If not local, upload the WebP file to S3
+		// S3 upload is optional, controlled by the local flag: in S3 mode the
+		// just-written per-size WebP is transferred to the target bucket.
 		if !ip.Config.IsLocal {
 			transferInput := fileservice.TransferInput{
 				Bucket:         ip.Config.TargetBucket,
-				SourceFilePath: webpOutputFilePath,
+				SourceFilePath: targetWebpFilePath,
 				TargetFilePath: outputKey,
 			}
 			if err := ip.FileService.Transfer(transferInput); err != nil {

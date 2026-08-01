@@ -253,6 +253,102 @@ func TestConvertSVGToPNG(t *testing.T) {
 	}
 }
 
+// recordingFileService captures Transfer calls so ProcessFile's upload
+// wiring can be verified without AWS.
+type recordingFileService struct {
+	transfers []fileservice.TransferInput
+}
+
+func (r *recordingFileService) Transfer(input fileservice.TransferInput) error {
+	r.transfers = append(r.transfers, input)
+	return nil
+}
+func (r *recordingFileService) ListFiles(input fileservice.ListFilesInput, filter func(*string) bool) ([]string, error) {
+	return nil, nil
+}
+func (r *recordingFileService) ToImageFiles(files []string) ([]*imagefile.ImageFile, error) {
+	return nil, nil
+}
+func (r *recordingFileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
+	return dest, nil
+}
+
+// TestProcessFile_S3ModeUploadsTheWrittenWebP drives the real pipeline in
+// S3 mode and verifies the file handed to Transfer is the per-size WebP
+// that ffmpeg actually wrote - the exact wiring that was previously broken.
+// Skips when rsvg-convert or ffmpeg is not installed.
+func TestProcessFile_S3ModeUploadsTheWrittenWebP(t *testing.T) {
+	// Scenario: S3-mode processing of one SVG at one size; the upload source
+	// must be the WebP on disk, and the target key must carry the size
+	// suffix.
+	if _, err := exec.LookPath("rsvg-convert"); err != nil {
+		t.Skip("integration test: rsvg-convert not installed")
+	}
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("integration test: ffmpeg not installed")
+	}
+
+	workDir := t.TempDir()
+	objectKey := "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg"
+	runUUID := "02b5e8da-a37b-4666-9892-44706466438e"
+
+	// Seed the downloaded source where ProcessFile reads it.
+	sourcePath := filepath.Join(workDir, runUUID, "source", objectKey)
+	if err := os.MkdirAll(filepath.Dir(sourcePath), 0755); err != nil {
+		t.Fatalf("failed to seed source dirs: %v", err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(realisticSVG), 0644); err != nil {
+		t.Fatalf("failed to seed source SVG: %v", err)
+	}
+
+	img, err := imagefile.NewImageFile(objectKey)
+	if err != nil || img == nil {
+		t.Fatalf("fixture parse failed: %v", err)
+	}
+
+	recorder := &recordingFileService{}
+	ip := &ImageProcessor{
+		UUID: runUUID,
+		Config: &Config{
+			IsLocal:      false,
+			TargetBucket: "vectoricons-webp-staging",
+			WorkDir:      workDir,
+			FFmpegPath:   ffmpegPath,
+			WebpSizes:    map[string]int{"thumbnail": 64},
+		},
+		FileService: recorder,
+	}
+
+	if err := ip.ProcessFile(*img); err != nil {
+		t.Fatalf("ProcessFile() error = %v", err)
+	}
+
+	if len(recorder.transfers) != 1 {
+		t.Fatalf("Transfer called %d times, want 1", len(recorder.transfers))
+	}
+	got := recorder.transfers[0]
+
+	wantSource := filepath.Join(workDir, runUUID, "output", "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-thumbnail.webp")
+	if got.SourceFilePath != wantSource {
+		t.Errorf("Transfer source = %q, want the written WebP %q", got.SourceFilePath, wantSource)
+	}
+	// The uploaded source must actually exist on disk with WebP content.
+	content, err := os.ReadFile(got.SourceFilePath)
+	if err != nil {
+		t.Fatalf("Transfer source does not exist on disk: %v", err)
+	}
+	if !bytes.HasPrefix(content, []byte("RIFF")) {
+		t.Errorf("Transfer source is not a WebP file")
+	}
+	if got.TargetFilePath != "iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup-thumbnail.webp" {
+		t.Errorf("Transfer target key = %q, want size-suffixed WebP key", got.TargetFilePath)
+	}
+	if got.Bucket != "vectoricons-webp-staging" {
+		t.Errorf("Transfer bucket = %q, want target bucket", got.Bucket)
+	}
+}
+
 // TestRunFFmpeg is an integration test for the PNG-to-WebP pipeline stage,
 // chained after a real rsvg-convert rasterization. Skips when either binary
 // is not installed.
