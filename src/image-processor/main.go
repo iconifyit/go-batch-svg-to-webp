@@ -228,9 +228,9 @@ func (ip *ImageProcessor) SetupLogging() error {
 }
 
 // ShouldInclude checks if a file should be included based on the include and
-// exclude lists. Prefixes are matched against the path relative to the
-// configured source root (LocalSource for local runs, SourceBucket for S3),
-// so absolute local paths and S3 object keys are filtered consistently.
+// exclude lists. In local mode, prefixes are matched against the path
+// relative to LocalSource; S3 object keys are already bucket-relative and
+// are matched as-is, so the same prefixes work in both modes.
 func (ip *ImageProcessor) ShouldInclude(filePath *string) bool {
 	include := ip.Config.Include
 	exclude := ip.Config.Exclude

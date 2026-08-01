@@ -143,7 +143,6 @@ func (svc *S3FileService) ListFiles(input ListFilesInput, filter func(*string) b
 		Bucket: aws.String(bucket),
 	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		for _, obj := range page.Contents {
-			log.Printf("\nObject Key: %s", *obj.Key)
 			if filter(obj.Key) {
 				files = append(files, *obj.Key)
 			}
@@ -170,6 +169,9 @@ func (svc *S3FileService) ToImageFiles(files []string) ([]*imagefile.ImageFile, 
 // creating parent directories as needed, and returns dest - matching the
 // LocalFileService.Download contract.
 func (svc *S3FileService) Download(file *imagefile.ImageFile, dest string) (string, error) {
+	if dest == "" {
+		return "", fmt.Errorf("no destination path provided for download of %s", file.ObjectKey)
+	}
 	if svc.SourceBucket == "" {
 		return "", fmt.Errorf("no source bucket configured: set the service SourceBucket")
 	}

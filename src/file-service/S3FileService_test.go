@@ -362,6 +362,20 @@ func TestS3Download(t *testing.T) {
 	}
 }
 
+// TestS3Download_EmptyDest verifies the error contract for a missing
+// destination path, instead of a confusing os.Create("") failure.
+func TestS3Download_EmptyDest(t *testing.T) {
+	// Scenario: a caller forgets to build the destination path.
+	svc := &S3FileService{SourceBucket: "vectoricons-private", Client: &mockS3Client{}}
+	img, err := imagefile.NewImageFile("iconify/icons/2C11DB2D5F79/B24091F3DF3E/coffee-cup.svg")
+	if err != nil || img == nil {
+		t.Fatalf("fixture parse failed: %v", err)
+	}
+	if _, err := svc.Download(img, ""); err == nil {
+		t.Fatal("Download() with empty dest: expected error, got nil")
+	}
+}
+
 // TestS3Download_GetError verifies an S3 failure surfaces as a wrapped
 // error.
 func TestS3Download_GetError(t *testing.T) {
@@ -374,7 +388,8 @@ func TestS3Download_GetError(t *testing.T) {
 		t.Fatalf("fixture parse failed: %v", err)
 	}
 
-	if _, err := svc.Download(img, ""); err == nil {
+	dest := filepath.Join(t.TempDir(), "robot-2.svg")
+	if _, err := svc.Download(img, dest); err == nil {
 		t.Fatal("Download() with failing GetObject: expected error, got nil")
 	}
 }
